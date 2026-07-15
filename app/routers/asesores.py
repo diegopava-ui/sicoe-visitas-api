@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from datetime import datetime, timezone
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -86,7 +88,6 @@ def crear_asesor(
             detail="La identificación o el correo ya están registrados",
         ) from exc
 
-
 @router.put("/{asesor_id}", response_model=AsesorRespuesta)
 def actualizar_asesor(
     asesor_id: int,
@@ -119,3 +120,34 @@ def actualizar_asesor(
             status_code=status.HTTP_409_CONFLICT,
             detail="La identificación o el correo ya están registrados",
         ) from exc
+    
+@router.delete(
+    "/{asesor_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def eliminar_asesor(
+    asesor_id: int,
+    db: Session = Depends(get_db),
+) -> Response:
+    asesor = db.scalar(
+        select(Asesor).where(
+            Asesor.id == asesor_id,
+            Asesor.deleted_at.is_(None),
+        )
+    )
+
+    if asesor is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Asesor no encontrado",
+        )
+
+    ahora = datetime.now(timezone.utc)
+
+    asesor.activo = False
+    asesor.deleted_at = ahora
+    asesor.updated_at = ahora
+
+    db.commit()
+
+    return Response(status_code=status.HTTP_204_NO_CONTENT)    
