@@ -56,3 +56,27 @@ def check_database_connection() -> dict[str, Any]:
             "database": "unavailable",
             "detail": "No fue posible conectar con la base de datos",
         }
+
+from collections.abc import Generator
+
+from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
+
+
+class Base(DeclarativeBase):
+    pass
+
+
+SessionLocal = sessionmaker(
+    bind=engine,
+    autoflush=False,
+    expire_on_commit=False,
+)
+
+
+def get_db() -> Generator[Session, None, None]:
+    database = SessionLocal()
+
+    try:
+        yield database
+    finally:
+        database.close()

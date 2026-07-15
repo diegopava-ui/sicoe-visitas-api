@@ -6,6 +6,9 @@ from fastapi import FastAPI
 from app.config import get_settings
 from app.database import check_database_connection
 
+from app.routers.asesores import router as asesores_router
+
+
 settings = get_settings()
 
 app = FastAPI(
@@ -13,7 +16,7 @@ app = FastAPI(
     version=settings.app_version,
 )
 
-
+app.include_router(asesores_router)
 @app.get("/")
 def inicio() -> dict[str, str]:
     return {

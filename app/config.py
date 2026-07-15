@@ -6,12 +6,12 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     app_name: str = "SICOE VISITAS API"
     app_version: str = "1.0.0"
-    environment: str = "production"
+    environment: str = "development"
 
-    db_host: str 
+    db_host: str
     db_port: int = 5432
-    db_name: str 
-    db_user: str 
+    db_name: str
+    db_user: str
     db_password: str
 
     model_config = SettingsConfigDict(
