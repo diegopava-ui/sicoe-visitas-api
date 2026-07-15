@@ -5,6 +5,8 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
 
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
 
 class Asesor(Base):
     __tablename__ = "asesores"
@@ -79,3 +81,10 @@ class Asesor(Base):
         DateTime(timezone=True),
         nullable=True,
     )
+
+    usuario = relationship(
+    "Usuario",
+    back_populates="asesor",
+    uselist=False,
+    lazy="selectin",
+)
