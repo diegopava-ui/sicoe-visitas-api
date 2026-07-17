@@ -5,9 +5,31 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
 
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    UniqueConstraint,
+    func,
+)
+
 
 class Usuario(Base):
     __tablename__ = "usuarios"
+
+    __table_args__ = (
+        UniqueConstraint(
+            "asesor_id",
+            name="uq_usuarios_asesor",
+        ),
+        CheckConstraint(
+            "rol IN ('ADMINISTRADOR', 'COORDINADOR', 'ASESOR')",
+            name="ck_usuarios_rol",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(
         Integer,
@@ -43,12 +65,14 @@ class Usuario(Base):
         String(50),
         nullable=False,
         default="ASESOR",
+        server_default="ASESOR",
     )
 
     activo: Mapped[bool] = mapped_column(
         Boolean,
         nullable=False,
         default=True,
+        server_default="true",
     )
 
     ultimo_acceso: Mapped[datetime | None] = mapped_column(
@@ -79,3 +103,4 @@ class Usuario(Base):
         back_populates="usuario",
         lazy="selectin",
     )
+   

@@ -4,6 +4,8 @@ from sqlalchemy.orm import Session
 from app.models.asesor import Asesor
 from app.models.usuario import Usuario
 
+from datetime import datetime, timezone
+
 
 def buscar_usuario_por_id(
     db: Session,
@@ -67,6 +69,18 @@ def guardar_usuario(
     db: Session,
     usuario: Usuario,
 ) -> Usuario:
+    db.add(usuario)
+    db.commit()
+    db.refresh(usuario)
+
+    return usuario
+
+def actualizar_ultimo_acceso(
+    db: Session,
+    usuario: Usuario,
+) -> Usuario:
+    usuario.ultimo_acceso = datetime.now(timezone.utc)
+
     db.add(usuario)
     db.commit()
     db.refresh(usuario)

@@ -10,6 +10,10 @@ from app.routers.asesores import router as asesores_router
 
 from app.routers.usuarios import router as usuarios_router
 
+from app.routers.auth import router as auth_router
+
+print("========== MAIN CARGADO ==========")
+
 
 settings = get_settings()
 
@@ -20,6 +24,7 @@ app = FastAPI(
 
 app.include_router(asesores_router)
 app.include_router(usuarios_router)
+app.include_router(auth_router)
 @app.get("/")
 def inicio() -> dict[str, str]:
     return {

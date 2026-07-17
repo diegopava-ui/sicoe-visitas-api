@@ -1,15 +1,35 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Integer, String, func
+from sqlalchemy import Boolean, DateTime, Integer, String, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
 
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    Integer,
+    String,
+    UniqueConstraint,
+    func,
+)
+
 
 class Asesor(Base):
     __tablename__ = "asesores"
+
+    __table_args__ = (
+        UniqueConstraint(
+            "identificacion",
+            name="uq_asesores_identificacion",
+        ),
+        UniqueConstraint(
+            "email",
+            name="uq_asesores_email",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(
         Integer,
@@ -42,9 +62,13 @@ class Asesor(Base):
         nullable=True,
     )
 
+    identificacion: Mapped[str] = mapped_column(
+        String(30),
+        nullable=False,
+    )
+
     email: Mapped[str] = mapped_column(
         String(150),
-        unique=True,
         nullable=False,
     )
 
@@ -62,6 +86,7 @@ class Asesor(Base):
         Boolean,
         nullable=False,
         default=True,
+        server_default="true",
     )
 
     created_at: Mapped[datetime] = mapped_column(
