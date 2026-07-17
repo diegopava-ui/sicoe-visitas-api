@@ -24,6 +24,13 @@ def verificar_password(
         password_guardado,
     )
 
+def decodificar_access_token(token: str) -> dict[str, Any]:
+    return jwt.decode(
+        token,
+        settings.jwt_secret_key,
+        algorithms=[settings.jwt_algorithm],
+)
+
 
 def crear_access_token(
     subject: str,

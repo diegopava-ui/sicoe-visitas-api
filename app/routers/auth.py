@@ -7,9 +7,8 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.schemas.auth import TokenRespuesta
 from app.services.auth_service import iniciar_sesion
-
-from fastapi import APIRouter
-
+from app.dependencies.auth import get_current_user
+from app.models.usuario import Usuario
 
 router = APIRouter(
     prefix="/api/v1/auth",
@@ -34,3 +33,19 @@ def login(
         username=formulario.username,
         password=formulario.password,
     )
+
+@router.get(
+    "/me",
+    response_model=TokenRespuesta,   # luego lo cambiaremos
+)
+def obtener_usuario_actual(
+    usuario: Usuario = Depends(get_current_user),
+):
+    return {
+        "access_token": "",
+        "token_type": "bearer",
+        "expires_in": 0,
+        "usuario_id": usuario.id,
+        "username": usuario.username,
+        "rol": usuario.rol,
+    }
