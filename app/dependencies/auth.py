@@ -10,8 +10,6 @@ from app.models.usuario import Usuario
 from app.repositories.usuario_repository import buscar_usuario_por_id
 from app.security import decodificar_access_token
 
-from fastapi import status
-
 
 oauth2_scheme = OAuth2PasswordBearer(
     tokenUrl="/api/v1/auth/login",
@@ -27,17 +25,6 @@ def get_current_user(
         detail="No fue posible validar las credenciales",
         headers={"WWW-Authenticate": "Bearer"},
     )
-
-def require_roles(*roles_permitidos):
-    def dependency(usuario: Usuario = Depends(get_current_user)):
-        if usuario.rol not in roles_permitidos:
-            raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="No tiene permisos para realizar esta acción.",
-            )
-        return usuario
-
-    return dependency
 
     try:
         payload = decodificar_access_token(token)
@@ -62,7 +49,10 @@ def require_roles(*roles_permitidos):
     except (InvalidTokenError, TypeError, ValueError) as error:
         raise credenciales_invalidas from error
 
-    usuario = buscar_usuario_por_id(db, usuario_id)
+    usuario = buscar_usuario_por_id(
+        db,
+        usuario_id,
+    )
 
     if usuario is None or usuario.deleted_at is not None:
         raise credenciales_invalidas
@@ -74,3 +64,18 @@ def require_roles(*roles_permitidos):
         )
 
     return usuario
+
+
+def require_roles(*roles_permitidos: str):
+    def dependency(
+        usuario: Usuario = Depends(get_current_user),
+    ) -> Usuario:
+        if usuario.rol not in roles_permitidos:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="No tiene permisos para realizar esta acción",
+            )
+
+        return usuario
+
+    return dependency

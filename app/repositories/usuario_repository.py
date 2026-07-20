@@ -1,4 +1,4 @@
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.models.asesor import Asesor
@@ -26,6 +26,7 @@ def buscar_usuario_por_username(
     return db.scalar(
         select(Usuario).where(
             Usuario.username == username,
+            Usuario.deleted_at.is_(None),
         )
     )
 
@@ -37,6 +38,7 @@ def buscar_usuario_por_email(
     return db.scalar(
         select(Usuario).where(
             Usuario.email == email,
+            Usuario.deleted_at.is_(None),
         )
     )
 
@@ -48,6 +50,7 @@ def buscar_usuario_por_asesor(
     return db.scalar(
         select(Usuario).where(
             Usuario.asesor_id == asesor_id,
+            Usuario.deleted_at.is_(None),
         )
     )
 
@@ -62,6 +65,38 @@ def buscar_asesor_activo(
             Asesor.activo.is_(True),
             Asesor.deleted_at.is_(None),
         )
+    )
+
+def listar_usuarios(
+    db: Session,
+    buscar: str | None = None,
+    limite: int = 50,
+    offset: int = 0,
+) -> list[Usuario]:
+    consulta = select(Usuario).where(
+        Usuario.deleted_at.is_(None),
+    )
+
+    if buscar:
+        termino = f"%{buscar.strip()}%"
+
+        consulta = consulta.where(
+            or_(
+                Usuario.username.ilike(termino),
+                Usuario.email.ilike(termino),
+                Usuario.rol.ilike(termino),
+            )
+        )
+
+    consulta = (
+        consulta
+        .order_by(Usuario.id)
+        .offset(offset)
+        .limit(limite)
+    )
+
+    return list(
+        db.scalars(consulta).all()
     )
 
 
@@ -81,6 +116,16 @@ def actualizar_ultimo_acceso(
 ) -> Usuario:
     usuario.ultimo_acceso = datetime.now(timezone.utc)
 
+    db.add(usuario)
+    db.commit()
+    db.refresh(usuario)
+
+    return usuario
+
+def actualizar_usuario(
+    db: Session,
+    usuario: Usuario,
+) -> Usuario:
     db.add(usuario)
     db.commit()
     db.refresh(usuario)
