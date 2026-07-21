@@ -18,6 +18,9 @@ from app.security import generar_hash_password
 
 from app.repositories.usuario_repository import (
     buscar_usuario_por_id,
+    buscar_usuario_por_id_incluyendo_eliminados,
+    desactivar_usuario as desactivar_usuario_repository,
+    reactivar_usuario as reactivar_usuario_repository,
 )
 
 from app.schemas.usuario import UsuarioActualizar, UsuarioCrear
@@ -210,3 +213,57 @@ def actualizar_usuario(
             status_code=status.HTTP_409_CONFLICT,
             detail="No fue posible actualizar el usuario",
         ) from exc
+    
+def desactivar_usuario(
+    db: Session,
+    usuario_id: int,
+    usuario_actual_id: int,
+) -> Usuario:
+    usuario = buscar_usuario_por_id(
+        db,
+        usuario_id,
+    )
+
+    if usuario is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Usuario no encontrado",
+        )
+
+    if usuario.id == usuario_actual_id:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="No puede desactivar su propio usuario",
+        )
+
+    return desactivar_usuario_repository(
+        db,
+        usuario,
+    )
+
+
+def reactivar_usuario(
+    db: Session,
+    usuario_id: int,
+) -> Usuario:
+    usuario = buscar_usuario_por_id_incluyendo_eliminados(
+        db,
+        usuario_id,
+    )
+
+    if usuario is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Usuario no encontrado",
+        )
+
+    if usuario.activo and usuario.deleted_at is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="El usuario ya se encuentra activo",
+        )
+
+    return reactivar_usuario_repository(
+        db,
+        usuario,
+    )    

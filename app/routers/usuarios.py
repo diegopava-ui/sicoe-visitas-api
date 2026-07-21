@@ -15,6 +15,8 @@ from app.services.usuario_service import (
     obtener_usuarios,
     obtener_usuario,
     actualizar_usuario,
+    desactivar_usuario,
+    reactivar_usuario,
 )
 
 from app.schemas.usuario import (
@@ -72,6 +74,39 @@ def actualizar_usuario_endpoint(
         usuario_id,
         datos,
     )
+
+@router.delete(
+    "/{usuario_id}",
+    response_model=UsuarioRespuesta,
+)
+def desactivar_usuario_endpoint(
+    usuario_id: int,
+    db: Session = Depends(get_db),
+    usuario_actual: Usuario = Depends(
+        require_roles("ADMINISTRADOR")
+    ),
+) -> UsuarioRespuesta:
+    return desactivar_usuario(
+        db=db,
+        usuario_id=usuario_id,
+        usuario_actual_id=usuario_actual.id,
+    )
+
+@router.patch(
+    "/{usuario_id}/reactivar",
+    response_model=UsuarioRespuesta,
+)
+def reactivar_usuario_endpoint(
+    usuario_id: int,
+    db: Session = Depends(get_db),
+    usuario_actual: Usuario = Depends(
+        require_roles("ADMINISTRADOR")
+    ),
+) -> UsuarioRespuesta:
+    return reactivar_usuario(
+        db=db,
+        usuario_id=usuario_id,
+    )    
 
 def obtener_usuario_por_id(
     usuario_id: int,

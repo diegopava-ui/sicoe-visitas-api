@@ -6,6 +6,7 @@ from app.models.usuario import Usuario
 
 from datetime import datetime, timezone
 
+from datetime import datetime, timezone
 
 def buscar_usuario_por_id(
     db: Session,
@@ -131,3 +132,43 @@ def actualizar_usuario(
     db.refresh(usuario)
 
     return usuario
+def desactivar_usuario(
+    db: Session,
+    usuario: Usuario,
+) -> Usuario:
+    fecha_actual = datetime.now(timezone.utc)
+
+    usuario.activo = False
+    usuario.deleted_at = fecha_actual
+    usuario.updated_at = fecha_actual
+
+    db.add(usuario)
+    db.commit()
+    db.refresh(usuario)
+
+    return usuario
+
+
+def reactivar_usuario(
+    db: Session,
+    usuario: Usuario,
+) -> Usuario:
+    usuario.activo = True
+    usuario.deleted_at = None
+    usuario.updated_at = datetime.now(timezone.utc)
+
+    db.add(usuario)
+    db.commit()
+    db.refresh(usuario)
+
+    return usuario
+
+def buscar_usuario_por_id_incluyendo_eliminados(
+    db: Session,
+    usuario_id: int,
+) -> Usuario | None:
+    return db.scalar(
+        select(Usuario).where(
+            Usuario.id == usuario_id,
+        )
+    )
