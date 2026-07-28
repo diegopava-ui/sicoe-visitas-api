@@ -103,4 +103,18 @@ class Usuario(Base):
         back_populates="usuario",
         lazy="selectin",
     )
+
+    visitas_creadas = relationship(
+        "Visita",
+        foreign_keys="Visita.created_by",
+        back_populates="usuario_creador",
+        lazy="selectin",
+    )
+
+    visitas_modificadas = relationship(
+        "Visita",
+        foreign_keys="Visita.updated_by",
+        back_populates="usuario_modificador",
+        lazy="selectin",
+    )
    

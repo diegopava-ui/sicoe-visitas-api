@@ -12,7 +12,15 @@ from app.routers.usuarios import router as usuarios_router
 
 from app.routers.auth import router as auth_router
 
+from app.routers.terceros import router as terceros_router
+
+from app.routers.visitas import router as visitas_router
+
+from app.routers.reportes import router as reportes_router
+
 from fastapi.middleware.cors import CORSMiddleware
+
+
 
 print("========== MAIN CARGADO ==========")
 
@@ -27,6 +35,11 @@ app = FastAPI(
 app.include_router(asesores_router)
 app.include_router(usuarios_router)
 app.include_router(auth_router)
+app.include_router(terceros_router)
+app.include_router(visitas_router)
+app.include_router(reportes_router)
+
+
 @app.get("/")
 def inicio() -> dict[str, str]:
     return {

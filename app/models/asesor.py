@@ -62,11 +62,6 @@ class Asesor(Base):
         nullable=True,
     )
 
-    identificacion: Mapped[str] = mapped_column(
-        String(30),
-        nullable=False,
-    )
-
     email: Mapped[str] = mapped_column(
         String(150),
         nullable=False,
@@ -107,9 +102,21 @@ class Asesor(Base):
         nullable=True,
     )
 
+    visitas = relationship(
+    "Visita",
+    back_populates="asesor",
+    lazy="selectin",
+    )
+
     usuario = relationship(
     "Usuario",
     back_populates="asesor",
     uselist=False,
     lazy="selectin",
-)
+    )
+
+    visitas = relationship(
+        "Visita",
+        back_populates="asesor",
+        lazy="selectin",
+    )

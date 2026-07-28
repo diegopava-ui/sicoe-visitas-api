@@ -27,3 +27,14 @@ __pycache__/
 
 # Windows
 Thumbs.db
+# Respaldos locales y temporales
+*.backup_*
+*.respaldo_*
+*.bak
+*.tmp
+
+*.py[cod]
+
+# Variables y secretos
+.env.*
+!.env.example
