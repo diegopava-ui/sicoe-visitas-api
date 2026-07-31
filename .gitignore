@@ -38,3 +38,7 @@ Thumbs.db
 # Variables y secretos
 .env.*
 !.env.example
+
+# Archivos generados
+output/
+app.zip

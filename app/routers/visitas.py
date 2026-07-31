@@ -1,4 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Query,
+    Response,
+    status,
+)
 
 from datetime import date
 
@@ -24,6 +31,19 @@ from app.services.visita_service import (
     reactivar_visita,
 )
 
+from app.services.visita_pdf_service import generar_pdf_visita
+
+
+from app.services.visita_service import (
+    actualizar_visita,
+    crear_visita,
+    desactivar_visita,
+    obtener_visita,
+    obtener_visitas,
+    reactivar_visita,
+)
+
+from app.services.visita_pdf_service import generar_pdf_visita
 
 router = APIRouter(
     prefix="/api/v1/visitas",
@@ -61,7 +81,6 @@ def listar_visitas(
     # Un asesor solo puede consultar sus propias visitas.
     if usuario_actual.rol == "ASESOR":
         asesor_id_consulta = usuario_actual.asesor_id
-
     return obtener_visitas(
          db=db,
         buscar=buscar,
@@ -76,10 +95,125 @@ def listar_visitas(
         pagina=pagina,
         limite=limite,
     )
+
 @router.get(
-    "/{visita_id}",
-    response_model=VisitaRespuesta,
+    "/{visita_id}/pdf",
+    response_class=Response,
+    summary="Descargar informe PDF de una visita",
 )
+def descargar_pdf_visita(
+    visita_id: int,
+    db: Session = Depends(get_db),
+    usuario_actual: Usuario = Depends(
+        require_roles(
+            "ADMINISTRADOR",
+            "COORDINADOR",
+            "ASESOR",
+        )
+    ),
+) -> Response:
+    """
+    Genera y descarga el informe corporativo
+    correspondiente a una visita.
+    """
+
+    visita = obtener_visita(
+        db=db,
+        visita_id=visita_id,
+    )
+
+    if (
+        usuario_actual.rol == "ASESOR"
+        and visita.asesor_id != usuario_actual.asesor_id
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "No tiene permiso para descargar "
+                "el informe de esta visita."
+            ),
+        )
+
+    contenido_pdf = generar_pdf_visita(
+        db=db,
+        visita_id=visita_id,
+    )
+
+    codigo_visita = f"VIS-{visita.id:06d}"
+    nombre_archivo = (
+        f"Informe_Visita_{codigo_visita}.pdf"
+    )
+
+    return Response(
+        content=contenido_pdf,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="{nombre_archivo}"'
+            ),
+            "Cache-Control": "no-store",
+        },
+    )
+
+@router.get(
+    "/{visita_id}/pdf",
+    response_class=Response,
+)
+def descargar_pdf_visita(
+    visita_id: int,
+    db: Session = Depends(get_db),
+    usuario_actual: Usuario = Depends(
+        require_roles(
+            "ADMINISTRADOR",
+            "COORDINADOR",
+            "ASESOR",
+        )
+    ),
+) -> Response:
+    """
+    Genera y descarga el informe corporativo
+    asociado con una visita.
+    """
+
+    visita = obtener_visita(
+        db=db,
+        visita_id=visita_id,
+    )
+
+    if (
+        usuario_actual.rol == "ASESOR"
+        and visita.asesor_id != usuario_actual.asesor_id
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "No tiene permiso para descargar "
+                "el informe de esta visita."
+            ),
+        )
+
+    contenido_pdf = generar_pdf_visita(
+        db=db,
+        visita_id=visita_id,
+    )
+
+    codigo_visita = f"VIS-{visita_id:06d}"
+    nombre_archivo = (
+        f"Informe_Visita_{codigo_visita}.pdf"
+    )
+
+    return Response(
+        content=contenido_pdf,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="{nombre_archivo}"'
+            ),
+            "Cache-Control": "no-store",
+        },
+    )
+
+@router.get("/{visita_id}")
 def obtener_visita_por_id(
     visita_id: int,
     db: Session = Depends(get_db),

@@ -1,0 +1,911 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+
+    <title>Informe de visita {{ documento.codigo }}</title>
+
+    <style>
+        @page {
+            size: A4;
+            margin: 11mm 11mm 13mm;
+
+            @bottom-left {
+                content: "SICOE VISITAS | Documento generado automáticamente";
+                color: #687b85;
+                font-size: 7px;
+            }
+
+            @bottom-right {
+                content: "Página " counter(page) " de " counter(pages);
+                color: #687b85;
+                font-size: 7px;
+            }
+        }
+
+        :root {
+            --azul: #1071b0;
+            --azul-profundo: #124d7a;
+            --azul-suave: #eaf4fa;
+            --verde: #84bc49;
+            --verde-oscuro: #54941f;
+            --verde-suave: #f1f8e9;
+            --grafito: #47565c;
+            --gris: #667b85;
+            --borde: #d6e0e5;
+            --fondo: #f5f8fa;
+            --blanco: #ffffff;
+            --advertencia: #d78a13;
+            --advertencia-suave: #fff6e2;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: Arial, Helvetica, sans-serif;
+            font-size: 9px;
+            line-height: 1.35;
+            color: #24343d;
+            background: var(--blanco);
+        }
+
+        .header {
+            display: table;
+            width: 100%;
+            min-height: 105px;
+            border: 1px solid var(--borde);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .header-logo,
+        .header-title,
+        .header-meta {
+            display: table-cell;
+            vertical-align: middle;
+        }
+
+        .header-logo img {
+            max-width: 135px;
+            max-height: 100px;
+        }
+
+        .header-logo img {
+            max-width: 112px;
+            max-height: 88px;
+        }
+
+        .header-title {
+            width: 50%;
+            padding: 12px 18px;
+            text-align: center;
+        }
+
+        .header-title h1 {
+            margin: 0;
+            color: var(--azul-profundo);
+            font-size: 24px;
+            line-height: 1.1;
+            letter-spacing: .2px;
+        }
+
+        .header-title p {
+            margin: 8px 0 0;
+            color: var(--grafito);
+            font-size: 11px;
+            font-weight: bold;
+        }
+
+        .brand-line {
+            width: 82px;
+            height: 3px;
+            margin: 10px auto 0;
+            background: linear-gradient(
+                90deg,
+                var(--verde) 0 45%,
+                var(--azul) 45% 100%
+            );
+            border-radius: 4px;
+        }
+
+        .header-meta {
+            width: 29%;
+            border-left: 1px solid var(--borde);
+        }
+
+        .meta-row {
+            display: table;
+            width: 100%;
+            min-height: 32px;
+            border-bottom: 1px solid var(--borde);
+        }
+
+        .meta-row:last-child {
+            border-bottom: 0;
+        }
+
+        .meta-label,
+        .meta-value {
+            display: table-cell;
+            vertical-align: middle;
+            padding: 7px 8px;
+        }
+
+        .meta-label {
+            width: 42%;
+            color: var(--grafito);
+            font-size: 7.5px;
+            font-weight: bold;
+            text-transform: uppercase;
+            background: var(--fondo);
+        }
+
+        .meta-value {
+            color: var(--azul-profundo);
+            font-size: 9px;
+            font-weight: bold;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 9px;
+            border-radius: 10px;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+
+        .badge-finalizada {
+            color: var(--verde-oscuro);
+            background: var(--verde-suave);
+            border: 1px solid #b8d99a;
+        }
+
+        .badge-programada,
+        .badge-en_proceso {
+            color: var(--azul-profundo);
+            background: var(--azul-suave);
+            border: 1px solid #bcd8e8;
+        }
+
+        .badge-cancelada {
+            color: #9d3333;
+            background: #fdecec;
+            border: 1px solid #e8b9b9;
+        }
+
+        .kpis {
+            display: table;
+            width: 100%;
+            margin-top: 10px;
+            table-layout: fixed;
+            border: 1px solid var(--borde);
+            border-radius: 7px;
+        }
+
+        .kpi {
+            display: table-cell;
+            padding: 9px 8px;
+            text-align: center;
+            border-right: 1px solid var(--borde);
+        }
+
+        .kpi:last-child {
+            border-right: 0;
+        }
+
+        .kpi-label {
+            color: var(--gris);
+            font-size: 7px;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+
+        .kpi-value {
+            margin-top: 3px;
+            color: var(--azul-profundo);
+            font-size: 14px;
+            font-weight: bold;
+        }
+
+        .kpi-note {
+            margin-top: 1px;
+            color: var(--gris);
+            font-size: 7px;
+        }
+
+        .grid-two {
+            display: table;
+            width: 100%;
+            margin-top: 12px;
+            table-layout: fixed;
+        }
+
+        .column {
+            display: table-cell;
+            width: 50%;
+            vertical-align: top;
+        }
+
+        .column:first-child {
+            padding-right: 5px;
+        }
+
+        .column:last-child {
+            padding-left: 5px;
+        }
+
+        .section-title {
+            margin: 0 0 6px;
+            color: var(--azul-profundo);
+            font-size: 11px;
+            font-weight: bold;
+        }
+
+        .card {
+            border: 1px solid var(--borde);
+            border-radius: 7px;
+            overflow: hidden;
+            background: var(--blanco);
+        }
+
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .data-table td {
+            padding: 6px 7px;
+            border-bottom: 1px solid #e4ebee;
+            vertical-align: top;
+        }
+
+        .data-table tr:last-child td {
+            border-bottom: 0;
+        }
+
+        .data-label {
+            width: 35%;
+            color: var(--grafito);
+            font-size: 7px;
+            font-weight: bold;
+            text-transform: uppercase;
+            background: var(--fondo);
+        }
+
+        .data-value {
+            color: #263840;
+            font-size: 8.5px;
+        }
+
+        .content-grid {
+            display: table;
+            width: 100%;
+            margin-top: 12px;
+            table-layout: fixed;
+        }
+
+        .content-card {
+            display: table-cell;
+            width: 33.33%;
+            padding: 0 4px;
+            vertical-align: top;
+        }
+
+        .content-card:first-child {
+            padding-left: 0;
+        }
+
+        .content-card:last-child {
+            padding-right: 0;
+        }
+
+        .content-box {
+            min-height: 91px;
+            padding: 9px;
+            border: 1px solid var(--borde);
+            border-radius: 7px;
+        }
+
+        .content-box h3 {
+            margin: 0 0 6px;
+            color: var(--azul-profundo);
+            font-size: 9px;
+            text-transform: uppercase;
+        }
+
+        .content-box p {
+            margin: 0;
+            white-space: pre-line;
+        }
+
+        .box-objetivo {
+            background: #f5f9fd;
+            border-color: #c8ddeb;
+        }
+
+        .box-desarrollo {
+            background: #fffaf0;
+            border-color: #eedaa6;
+        }
+
+        .box-resultado {
+            background: var(--verde-suave);
+            border-color: #c9dfa9;
+        }
+
+        .large-grid {
+            display: table;
+            width: 100%;
+            margin-top: 12px;
+            table-layout: fixed;
+        }
+
+        .large-left,
+        .large-right {
+            display: table-cell;
+            vertical-align: top;
+        }
+
+        .large-left {
+            width: 48%;
+            padding-right: 5px;
+        }
+
+        .large-right {
+            width: 52%;
+            padding-left: 5px;
+        }
+
+        .text-panel {
+            min-height: 94px;
+            padding: 9px;
+            border: 1px solid var(--borde);
+            border-radius: 7px;
+            white-space: pre-line;
+        }
+
+        .commitment {
+            min-height: 94px;
+            padding: 9px;
+            border: 1px solid #efd69d;
+            border-radius: 7px;
+            background: var(--advertencia-suave);
+            white-space: pre-line;
+        }
+
+        .evidence-section {
+            margin-top: 12px;
+        }
+
+        .evidence-grid {
+            display: table;
+            width: 100%;
+            table-layout: fixed;
+        }
+
+        .evidence-card {
+            display: table-cell;
+            width: 33.33%;
+            padding: 0 4px;
+            vertical-align: top;
+        }
+
+        .evidence-card:first-child {
+            padding-left: 0;
+        }
+
+        .evidence-card:last-child {
+            padding-right: 0;
+        }
+
+        .evidence-frame {
+            padding: 5px;
+            border: 1px solid var(--borde);
+            border-radius: 7px;
+            background: var(--fondo);
+        }
+
+        .evidence-image {
+            width: 100%;
+            height: 108px;
+            object-fit: cover;
+            border-radius: 5px;
+            background: #eaf0f3;
+        }
+
+        .evidence-placeholder {
+            display: table;
+            width: 100%;
+            height: 108px;
+            border-radius: 5px;
+            background: #eaf0f3;
+        }
+
+        .evidence-placeholder span {
+            display: table-cell;
+            vertical-align: middle;
+            text-align: center;
+            color: var(--gris);
+            font-weight: bold;
+        }
+
+        .evidence-caption {
+            margin-top: 5px;
+            color: var(--grafito);
+            font-size: 7.5px;
+        }
+
+        .no-evidence {
+            padding: 16px;
+            text-align: center;
+            color: var(--gris);
+            border: 1px dashed var(--borde);
+            border-radius: 7px;
+            background: var(--fondo);
+        }
+
+        .signatures {
+            display: table;
+            width: 100%;
+            margin-top: 12px;
+            table-layout: fixed;
+        }
+
+        .signature-card {
+            display: table-cell;
+            width: 50%;
+            padding: 0 5px;
+            vertical-align: top;
+        }
+
+        .signature-card:first-child {
+            padding-left: 0;
+        }
+
+        .signature-card:last-child {
+            padding-right: 0;
+        }
+
+        .signature-box {
+            height: 104px;
+            padding: 8px;
+            text-align: center;
+            border: 1px solid var(--borde);
+            border-radius: 7px;
+        }
+
+        .signature-title {
+            color: var(--azul-profundo);
+            font-size: 7px;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+
+        .signature-space {
+            height: 48px;
+            padding-top: 8px;
+        }
+
+        .signature-space img {
+            max-height: 42px;
+            max-width: 180px;
+        }
+
+        .signature-line {
+            width: 78%;
+            margin: 0 auto 4px;
+            border-top: 1px solid #81929a;
+        }
+
+        .signature-name {
+            font-weight: bold;
+        }
+
+        .document-control {
+            display: table;
+            width: 100%;
+            margin-top: 12px;
+            border: 1px solid var(--borde);
+            border-radius: 7px;
+            table-layout: fixed;
+        }
+
+        .control-cell {
+            display: table-cell;
+            padding: 7px;
+            text-align: center;
+            vertical-align: middle;
+            border-right: 1px solid var(--borde);
+        }
+
+        .control-cell:last-child {
+            border-right: 0;
+        }
+
+        .control-label {
+            color: var(--gris);
+            font-size: 6.5px;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+
+        .control-value {
+            margin-top: 2px;
+            color: var(--azul-profundo);
+            font-size: 8px;
+            font-weight: bold;
+        }
+
+        .confidential {
+            margin-top: 6px;
+            color: var(--gris);
+            font-size: 6.8px;
+            text-align: center;
+        }
+
+        .avoid-break {
+            break-inside: avoid;
+        }
+    </style>
+</head>
+
+<body>
+
+    <header class="header">
+        <div class="header-logo">
+            {% if documento.logo_uri %}
+                <img
+                    src="{{ documento.logo_uri }}"
+                    alt="Logo oficial SICOE"
+                >
+            {% endif %}
+        </div>
+
+        <div class="header-title">
+            <h1>REGISTRO DE VISITA</h1>
+            <p>INFORME TÉCNICO Y DE SEGUIMIENTO</p>
+            <div class="brand-line"></div>
+        </div>
+
+        <div class="header-meta">
+            <div class="meta-row">
+                <div class="meta-label">Visita No.</div>
+                <div class="meta-value">
+                    {{ documento.codigo }}
+                </div>
+            </div>
+
+            <div class="meta-row">
+                <div class="meta-label">Estado</div>
+                <div class="meta-value">
+                    <span class="badge badge-{{ visita.estado|lower }}">
+                        {{ visita.estado }}
+                    </span>
+                </div>
+            </div>
+
+            <div class="meta-row">
+                <div class="meta-label">Generado</div>
+                <div class="meta-value">
+                    {{ documento.fecha_generacion.strftime("%d/%m/%Y %H:%M") }}
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <section class="kpis avoid-break">
+        <div class="kpi">
+            <div class="kpi-label">Duración</div>
+            <div class="kpi-value">
+                {{ visita.duracion_minutos }} min
+            </div>
+            <div class="kpi-note">Tiempo registrado</div>
+        </div>
+
+        <div class="kpi">
+            <div class="kpi-label">Participantes</div>
+            <div class="kpi-value">
+                {{ visita.cantidad_participantes }}
+            </div>
+            <div class="kpi-note">Personas</div>
+        </div>
+
+        <div class="kpi">
+            <div class="kpi-label">Satisfacción</div>
+            <div class="kpi-value">
+                {{ visita.nivel_satisfaccion }}
+            </div>
+            <div class="kpi-note">Resultado reportado</div>
+        </div>
+
+        <div class="kpi">
+            <div class="kpi-label">Próxima visita</div>
+            <div class="kpi-value">
+                {% if visita.proxima_visita %}
+                    {{ visita.proxima_visita.strftime("%d/%m/%Y") }}
+                {% else %}
+                    Pendiente
+                {% endif %}
+            </div>
+            <div class="kpi-note">Seguimiento</div>
+        </div>
+    </section>
+
+    <section class="grid-two avoid-break">
+        <div class="column">
+            <h2 class="section-title">
+                1. INFORMACIÓN DEL TERCERO
+            </h2>
+
+            <div class="card">
+                <table class="data-table">
+                    <tr>
+                        <td class="data-label">Empresa / tercero</td>
+                        <td class="data-value">{{ empresa.nombre }}</td>
+                    </tr>
+                    <tr>
+                        <td class="data-label">NIT</td>
+                        <td class="data-value">{{ empresa.nit }}</td>
+                    </tr>
+                    <tr>
+                        <td class="data-label">Ciudad</td>
+                        <td class="data-value">
+                            {{ empresa.ciudad }}, {{ empresa.departamento }}
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="data-label">Dirección</td>
+                        <td class="data-value">{{ empresa.direccion }}</td>
+                    </tr>
+                    <tr>
+                        <td class="data-label">Contacto</td>
+                        <td class="data-value">
+                            {{ empresa.contacto_nombre }}
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="data-label">Cargo</td>
+                        <td class="data-value">
+                            {{ empresa.cargo_contacto }}
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="data-label">Teléfono</td>
+                        <td class="data-value">{{ empresa.telefono }}</td>
+                    </tr>
+                    <tr>
+                        <td class="data-label">Correo</td>
+                        <td class="data-value">{{ empresa.correo }}</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+
+        <div class="column">
+            <h2 class="section-title">
+                2. INFORMACIÓN DE LA VISITA
+            </h2>
+
+            <div class="card">
+                <table class="data-table">
+                    <tr>
+                        <td class="data-label">Asesor</td>
+                        <td class="data-value">{{ asesor.nombre }}</td>
+                    </tr>
+                    <tr>
+                        <td class="data-label">Tipo</td>
+                        <td class="data-value">{{ visita.tipo }}</td>
+                    </tr>
+                    <tr>
+                        <td class="data-label">Fecha</td>
+                        <td class="data-value">
+                            {{ visita.fecha.strftime("%d/%m/%Y") }}
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="data-label">Horario</td>
+                        <td class="data-value">
+                            {% if visita.hora_inicio %}
+                                {{ visita.hora_inicio.strftime("%H:%M") }}
+                            {% else %}
+                                No registrado
+                            {% endif %}
+                            -
+                            {% if visita.hora_fin %}
+                                {{ visita.hora_fin.strftime("%H:%M") }}
+                            {% else %}
+                                No registrado
+                            {% endif %}
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="data-label">Servicio</td>
+                        <td class="data-value">{{ visita.servicio }}</td>
+                    </tr>
+                    <tr>
+                        <td class="data-label">Origen</td>
+                        <td class="data-value">
+                            {{ visita.origen_registro }}
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="data-label">Asesor correo</td>
+                        <td class="data-value">{{ asesor.email }}</td>
+                    </tr>
+                    <tr>
+                        <td class="data-label">Ubicación GPS</td>
+                        <td class="data-value">
+                            {% if ubicacion.latitud and ubicacion.longitud %}
+                                {{ ubicacion.latitud }},
+                                {{ ubicacion.longitud }}
+                            {% else %}
+                                No registrada
+                            {% endif %}
+                        </td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+    </section>
+
+    <section class="content-grid avoid-break">
+        <div class="content-card">
+            <div class="content-box box-objetivo">
+                <h3>3. Objetivo</h3>
+                <p>{{ visita.objetivo }}</p>
+            </div>
+        </div>
+
+        <div class="content-card">
+            <div class="content-box box-desarrollo">
+                <h3>4. Desarrollo</h3>
+                <p>{{ visita.desarrollo }}</p>
+            </div>
+        </div>
+
+        <div class="content-card">
+            <div class="content-box box-resultado">
+                <h3>5. Resultado</h3>
+                <p>{{ visita.resultado }}</p>
+            </div>
+        </div>
+    </section>
+
+    <section class="large-grid avoid-break">
+        <div class="large-left">
+            <h2 class="section-title">
+                6. OBSERVACIONES
+            </h2>
+
+            <div class="text-panel">
+                {{ visita.observaciones }}
+            </div>
+        </div>
+
+        <div class="large-right">
+            <h2 class="section-title">
+                7. COMPROMISOS
+            </h2>
+
+            <div class="commitment">
+                {{ visita.compromisos }}
+            </div>
+        </div>
+    </section>
+
+    <section class="evidence-section">
+        <h2 class="section-title">
+            8. EVIDENCIAS
+        </h2>
+
+        {% if evidencias %}
+            <div class="evidence-grid">
+                {% for evidencia in evidencias[:3] %}
+                    <div class="evidence-card">
+                        <div class="evidence-frame">
+                            {% if evidencia.tipo_archivo == "FOTO" %}
+                                <img
+                                    class="evidence-image"
+                                    src="{{ evidencia.url_archivo }}"
+                                    alt="{{ evidencia.descripcion }}"
+                                >
+                            {% else %}
+                                <div class="evidence-placeholder">
+                                    <span>
+                                        {{ evidencia.tipo_archivo }}
+                                    </span>
+                                </div>
+                            {% endif %}
+
+                            <div class="evidence-caption">
+                                <strong>
+                                    {{ evidencia.nombre_archivo }}
+                                </strong>
+                                <br>
+                                {{ evidencia.descripcion }}
+                            </div>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="no-evidence">
+                Esta visita no tiene evidencias activas registradas.
+            </div>
+        {% endif %}
+    </section>
+
+    <section class="signatures avoid-break">
+        <div class="signature-card">
+            <div class="signature-box">
+                <div class="signature-title">
+                    Asesor responsable
+                </div>
+
+                <div class="signature-space"></div>
+                <div class="signature-line"></div>
+
+                <div class="signature-name">
+                    {{ asesor.nombre }}
+                </div>
+            </div>
+        </div>
+
+        <div class="signature-card">
+            <div class="signature-box">
+                <div class="signature-title">
+                    Representante del tercero
+                </div>
+
+                <div class="signature-space">
+                    {% if firmas.cliente_url %}
+                        <img
+                            src="{{ firmas.cliente_url }}"
+                            alt="Firma del representante"
+                        >
+                    {% endif %}
+                </div>
+
+                <div class="signature-line"></div>
+
+                <div class="signature-name">
+                    {{ empresa.contacto_nombre }}
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="document-control avoid-break">
+        <div class="control-cell">
+            <div class="control-label">Control documental</div>
+            <div class="control-value">SICOE VISITAS</div>
+        </div>
+
+        <div class="control-cell">
+            <div class="control-label">Código</div>
+            <div class="control-value">SV-FOR-001</div>
+        </div>
+
+        <div class="control-cell">
+            <div class="control-label">Versión</div>
+            <div class="control-value">
+                {{ documento.version }}
+            </div>
+        </div>
+
+        <div class="control-cell">
+            <div class="control-label">Clasificación</div>
+            <div class="control-value">Uso interno</div>
+        </div>
+    </section>
+
+    <div class="confidential">
+        La información contenida en este documento es confidencial
+        y de uso exclusivo de SICOE y del tercero relacionado.
+    </div>
+
+</body>
+</html>
