@@ -1,29 +1,33 @@
+﻿import logging
+
 from fastapi import HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models.usuario import Usuario
 from app.repositories.usuario_repository import (
+    actualizar_usuario as actualizar_usuario_repository,
     buscar_asesor_activo,
     buscar_usuario_por_asesor,
     buscar_usuario_por_email,
-    buscar_usuario_por_username,
-    guardar_usuario,
-    listar_usuarios as listar_usuarios_repository,
-    actualizar_usuario as actualizar_usuario_repository,
-    buscar_usuario_por_id,
-)
-from app.schemas.usuario import UsuarioCrear
-from app.security import generar_hash_password
-
-from app.repositories.usuario_repository import (
     buscar_usuario_por_id,
     buscar_usuario_por_id_incluyendo_eliminados,
+    buscar_usuario_por_username,
     desactivar_usuario as desactivar_usuario_repository,
+    guardar_usuario,
+    listar_usuarios as listar_usuarios_repository,
     reactivar_usuario as reactivar_usuario_repository,
 )
+from app.schemas.usuario import (
+    UsuarioActualizar,
+    UsuarioCrear,
+    UsuarioPasswordRestablecer,
+)
+from app.security import generar_hash_password
 
-from app.schemas.usuario import UsuarioActualizar, UsuarioCrear
+
+logger = logging.getLogger(__name__)
+
 
 def crear_usuario(
     db: Session,
@@ -45,7 +49,10 @@ def crear_usuario(
         )
 
     if datos.asesor_id is not None:
-        asesor = buscar_asesor_activo(db, datos.asesor_id)
+        asesor = buscar_asesor_activo(
+            db,
+            datos.asesor_id,
+        )
 
         if asesor is None:
             raise HTTPException(
@@ -53,7 +60,10 @@ def crear_usuario(
                 detail="El asesor indicado no existe o está inactivo",
             )
 
-        if buscar_usuario_por_asesor(db, datos.asesor_id):
+        if buscar_usuario_por_asesor(
+            db,
+            datos.asesor_id,
+        ):
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="El asesor ya tiene un usuario asociado",
@@ -63,22 +73,29 @@ def crear_usuario(
         asesor_id=datos.asesor_id,
         username=username,
         email=email,
-        password_hash=generar_hash_password(datos.password),
+        password_hash=generar_hash_password(
+            datos.password
+        ),
         rol=datos.rol,
         activo=datos.activo,
     )
 
     try:
-        return guardar_usuario(db, usuario)
-
+        return guardar_usuario(
+            db,
+            usuario,
+        )
     except IntegrityError as exc:
         db.rollback()
-
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="No fue posible crear el usuario por datos duplicados",
+            detail=(
+                "No fue posible crear el usuario "
+                "por datos duplicados"
+            ),
         ) from exc
-    
+
+
 def obtener_usuarios(
     db: Session,
     buscar: str | None = None,
@@ -92,11 +109,11 @@ def obtener_usuarios(
         offset=offset,
     )
 
+
 def obtener_usuario(
     db: Session,
     usuario_id: int,
 ) -> Usuario:
-
     usuario = buscar_usuario_por_id(
         db,
         usuario_id,
@@ -108,7 +125,8 @@ def obtener_usuario(
             detail="Usuario no encontrado",
         )
 
-    return usuario    
+    return usuario
+
 
 def actualizar_usuario(
     db: Session,
@@ -133,9 +151,11 @@ def actualizar_usuario(
     if "username" in cambios:
         nuevo_username = cambios["username"]
 
-        usuario_existente = buscar_usuario_por_username(
-            db,
-            nuevo_username,
+        usuario_existente = (
+            buscar_usuario_por_username(
+                db,
+                nuevo_username,
+            )
         )
 
         if (
@@ -144,7 +164,10 @@ def actualizar_usuario(
         ):
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="El nombre de usuario ya está registrado",
+                detail=(
+                    "El nombre de usuario "
+                    "ya está registrado"
+                ),
             )
 
     if "email" in cambios:
@@ -154,9 +177,11 @@ def actualizar_usuario(
 
         cambios["email"] = nuevo_email
 
-        usuario_existente = buscar_usuario_por_email(
-            db,
-            nuevo_email,
+        usuario_existente = (
+            buscar_usuario_por_email(
+                db,
+                nuevo_email,
+            )
         )
 
         if (
@@ -165,7 +190,10 @@ def actualizar_usuario(
         ):
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="El correo electrónico ya está registrado",
+                detail=(
+                    "El correo electrónico "
+                    "ya está registrado"
+                ),
             )
 
     if "asesor_id" in cambios:
@@ -180,12 +208,17 @@ def actualizar_usuario(
             if asesor is None:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
-                    detail="El asesor indicado no existe o está inactivo",
+                    detail=(
+                        "El asesor indicado no existe "
+                        "o está inactivo"
+                    ),
                 )
 
-            usuario_existente = buscar_usuario_por_asesor(
-                db,
-                nuevo_asesor_id,
+            usuario_existente = (
+                buscar_usuario_por_asesor(
+                    db,
+                    nuevo_asesor_id,
+                )
             )
 
             if (
@@ -194,26 +227,100 @@ def actualizar_usuario(
             ):
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
-                    detail="El asesor ya tiene un usuario asociado",
+                    detail=(
+                        "El asesor ya tiene "
+                        "un usuario asociado"
+                    ),
                 )
 
     for campo, valor in cambios.items():
-        setattr(usuario, campo, valor)
+        setattr(
+            usuario,
+            campo,
+            valor,
+        )
 
     try:
         return actualizar_usuario_repository(
             db,
             usuario,
         )
-
     except IntegrityError as exc:
         db.rollback()
-
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="No fue posible actualizar el usuario",
         ) from exc
-    
+
+
+def restablecer_password_usuario(
+    db: Session,
+    usuario_id: int,
+    datos: UsuarioPasswordRestablecer,
+    usuario_actual_id: int,
+) -> Usuario:
+    """
+    Restablece la contraseña de un usuario activo.
+
+    La contraseña nunca se registra en logs ni se guarda
+    en texto plano. El router restringe esta acción al rol
+    ADMINISTRADOR.
+    """
+
+    usuario = buscar_usuario_por_id(
+        db,
+        usuario_id,
+    )
+
+    if usuario is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Usuario no encontrado o inactivo",
+        )
+
+    if (
+        datos.nueva_password
+        != datos.confirmar_password
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Las contraseñas no coinciden",
+        )
+
+    usuario.password_hash = (
+        generar_hash_password(
+            datos.nueva_password
+        )
+    )
+
+    try:
+        usuario_actualizado = (
+            actualizar_usuario_repository(
+                db,
+                usuario,
+            )
+        )
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "No fue posible restablecer "
+                "la contraseña"
+            ),
+        ) from exc
+
+    logger.info(
+        "Restablecimiento de contraseña "
+        "realizado por usuario_id=%s "
+        "sobre usuario_id=%s",
+        usuario_actual_id,
+        usuario_id,
+    )
+
+    return usuario_actualizado
+
+
 def desactivar_usuario(
     db: Session,
     usuario_id: int,
@@ -233,7 +340,10 @@ def desactivar_usuario(
     if usuario.id == usuario_actual_id:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="No puede desactivar su propio usuario",
+            detail=(
+                "No puede desactivar "
+                "su propio usuario"
+            ),
         )
 
     return desactivar_usuario_repository(
@@ -246,9 +356,11 @@ def reactivar_usuario(
     db: Session,
     usuario_id: int,
 ) -> Usuario:
-    usuario = buscar_usuario_por_id_incluyendo_eliminados(
-        db,
-        usuario_id,
+    usuario = (
+        buscar_usuario_por_id_incluyendo_eliminados(
+            db,
+            usuario_id,
+        )
     )
 
     if usuario is None:
@@ -257,13 +369,18 @@ def reactivar_usuario(
             detail="Usuario no encontrado",
         )
 
-    if usuario.activo and usuario.deleted_at is None:
+    if (
+        usuario.activo
+        and usuario.deleted_at is None
+    ):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="El usuario ya se encuentra activo",
+            detail=(
+                "El usuario ya se encuentra activo"
+            ),
         )
 
     return reactivar_usuario_repository(
         db,
         usuario,
-    )    
+    )

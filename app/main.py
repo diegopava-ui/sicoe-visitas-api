@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+﻿from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import FastAPI
@@ -17,6 +17,12 @@ from app.routers.terceros import router as terceros_router
 from app.routers.visitas import router as visitas_router
 
 from app.routers.reportes import router as reportes_router
+
+from app.routers.notificaciones import router as notificaciones_router
+
+from app.routers.calendario import router as calendario_router
+
+from app.routers.agenda_agente import router as agenda_agente_router
 
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -38,6 +44,9 @@ app.include_router(auth_router)
 app.include_router(terceros_router)
 app.include_router(visitas_router)
 app.include_router(reportes_router)
+app.include_router(notificaciones_router)
+app.include_router(calendario_router)
+app.include_router(agenda_agente_router)
 
 
 @app.get("/")
@@ -76,3 +85,4 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+

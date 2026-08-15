@@ -18,6 +18,11 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 60
 
+    # Piloto controlado de WhatsApp. Los números se cargan desde .env.
+    whatsapp_pilot_mode: bool = False
+    whatsapp_pilot_asesor_number: str | None = None
+    whatsapp_pilot_cliente_number: str | None = None
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

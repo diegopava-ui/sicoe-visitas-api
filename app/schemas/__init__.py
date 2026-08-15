@@ -59,3 +59,15 @@ __all__ = [
     "VisitaEvidenciaActualizar",
     "VisitaEvidenciaRespuesta",
 ]
+
+from app.schemas.notificacion import (
+    CanalNotificacion,
+    EstadoNotificacion,
+    NotificacionCrear,
+    NotificacionRespuesta,
+    PreferenciaNotificacionActualizar,
+    PreferenciaNotificacionCrear,
+    PreferenciaNotificacionRespuesta,
+    SimulacionWhatsAppRespuesta,
+    TipoDestinatario,
+)

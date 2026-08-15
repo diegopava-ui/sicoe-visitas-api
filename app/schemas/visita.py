@@ -44,6 +44,14 @@ NivelSatisfaccion = Literal[
 ]
 
 
+FuenteUbicacion = Literal[
+    "GPS",
+    "GEOCODIFICADA",
+    "MANUAL",
+    "SIN_VALIDAR",
+]
+
+
 class VisitaBase(BaseModel):
     asesor_id: int = Field(gt=0)
     tercero_id: int = Field(gt=0)
@@ -252,6 +260,11 @@ class TerceroResumen(BaseModel):
 class VisitaRespuesta(VisitaBase):
     id: int
     tercero: TerceroResumen | None = None
+
+    fuente_ubicacion: FuenteUbicacion = "SIN_VALIDAR"
+    ubicacion_validada: bool = False
+    ubicacion_validada_at: datetime | None = None
+    ubicacion_validada_by: int | None = None
 
     created_by: int | None
     updated_by: int | None

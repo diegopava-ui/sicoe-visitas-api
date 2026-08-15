@@ -1,4 +1,4 @@
-from datetime import datetime
+﻿from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
@@ -55,6 +55,17 @@ class UsuarioActualizar(BaseModel):
             raise ValueError("El nombre de usuario no puede contener espacios")
 
         return username
+
+
+class UsuarioPasswordRestablecer(BaseModel):
+    nueva_password: str = Field(
+        min_length=10,
+        max_length=128,
+    )
+    confirmar_password: str = Field(
+        min_length=10,
+        max_length=128,
+    )
 
 
 class UsuarioRespuesta(UsuarioBase):

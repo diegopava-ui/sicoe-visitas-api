@@ -101,6 +101,17 @@ class Visita(Base):
             """,
             name="ck_visitas_nivel_satisfaccion",
         ),
+        CheckConstraint(
+            """
+            fuente_ubicacion IN (
+                'GPS',
+                'GEOCODIFICADA',
+                'MANUAL',
+                'SIN_VALIDAR'
+            )
+            """,
+            name="ck_visitas_fuente_ubicacion",
+        ),
     )
 
     id: Mapped[int] = mapped_column(
@@ -264,6 +275,32 @@ class Visita(Base):
     longitud: Mapped[Decimal | None] = mapped_column(
         Numeric(10, 7),
         nullable=True,
+    )
+
+    fuente_ubicacion: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default="SIN_VALIDAR",
+        server_default="SIN_VALIDAR",
+        index=True,
+    )
+
+    ubicacion_validada: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default="false",
+    )
+
+    ubicacion_validada_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+    ubicacion_validada_by: Mapped[int | None] = mapped_column(
+        ForeignKey("usuarios.id"),
+        nullable=True,
+        index=True,
     )
 
     firma_cliente_url: Mapped[str | None] = mapped_column(

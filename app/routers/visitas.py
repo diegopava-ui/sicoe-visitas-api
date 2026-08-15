@@ -1,5 +1,6 @@
 from fastapi import (
     APIRouter,
+    Body,
     Depends,
     HTTPException,
     Query,
@@ -22,6 +23,10 @@ from app.schemas.visita import (
     VisitaRespuesta,
     VisitaActualizar,
 )
+from app.schemas.ubicacion import (
+    UbicacionValidacionRespuesta,
+    UbicacionValidar,
+)
 from app.services.visita_service import (
     actualizar_visita,
     crear_visita,
@@ -32,18 +37,7 @@ from app.services.visita_service import (
 )
 
 from app.services.visita_pdf_service import generar_pdf_visita
-
-
-from app.services.visita_service import (
-    actualizar_visita,
-    crear_visita,
-    desactivar_visita,
-    obtener_visita,
-    obtener_visitas,
-    reactivar_visita,
-)
-
-from app.services.visita_pdf_service import generar_pdf_visita
+from app.services.ubicacion_service import validar_ubicacion_visita
 
 router = APIRouter(
     prefix="/api/v1/visitas",
@@ -140,64 +134,6 @@ def descargar_pdf_visita(
     )
 
     codigo_visita = f"VIS-{visita.id:06d}"
-    nombre_archivo = (
-        f"Informe_Visita_{codigo_visita}.pdf"
-    )
-
-    return Response(
-        content=contenido_pdf,
-        media_type="application/pdf",
-        headers={
-            "Content-Disposition": (
-                f'attachment; filename="{nombre_archivo}"'
-            ),
-            "Cache-Control": "no-store",
-        },
-    )
-
-@router.get(
-    "/{visita_id}/pdf",
-    response_class=Response,
-)
-def descargar_pdf_visita(
-    visita_id: int,
-    db: Session = Depends(get_db),
-    usuario_actual: Usuario = Depends(
-        require_roles(
-            "ADMINISTRADOR",
-            "COORDINADOR",
-            "ASESOR",
-        )
-    ),
-) -> Response:
-    """
-    Genera y descarga el informe corporativo
-    asociado con una visita.
-    """
-
-    visita = obtener_visita(
-        db=db,
-        visita_id=visita_id,
-    )
-
-    if (
-        usuario_actual.rol == "ASESOR"
-        and visita.asesor_id != usuario_actual.asesor_id
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=(
-                "No tiene permiso para descargar "
-                "el informe de esta visita."
-            ),
-        )
-
-    contenido_pdf = generar_pdf_visita(
-        db=db,
-        visita_id=visita_id,
-    )
-
-    codigo_visita = f"VIS-{visita_id:06d}"
     nombre_archivo = (
         f"Informe_Visita_{codigo_visita}.pdf"
     )
@@ -323,6 +259,54 @@ def actualizar_visita_endpoint(
         visita_id=visita_id,
         datos=datos,
         usuario_actual_id=usuario_actual.id,
+    )
+
+
+@router.patch(
+    "/{visita_id}/ubicacion/validar",
+    response_model=UbicacionValidacionRespuesta,
+    summary="Validar ubicación de una visita",
+)
+def validar_ubicacion_visita_endpoint(
+    visita_id: int,
+    datos: UbicacionValidar = Body(
+        ...,
+        openapi_examples={
+            "validar_coordenadas_existentes": {
+                "summary": "Validar coordenadas existentes",
+                "description": (
+                    "Confirma las coordenadas ya guardadas "
+                    "sin reemplazar latitud ni longitud."
+                ),
+                "value": {
+                    "fuente_ubicacion": "MANUAL",
+                },
+            },
+        },
+    ),
+    db: Session = Depends(get_db),
+    usuario_actual: Usuario = Depends(
+        require_roles(
+            "ADMINISTRADOR",
+            "COORDINADOR",
+            "ASESOR",
+        )
+    ),
+) -> UbicacionValidacionRespuesta:
+    """
+    Confirma la ubicación de una visita y registra
+    de forma auditable la fuente, fecha y usuario
+    que realizó la validación.
+
+    Si el usuario es ASESOR, solo puede validar
+    visitas asignadas a su propio asesor.
+    """
+
+    return validar_ubicacion_visita(
+        db=db,
+        visita_id=visita_id,
+        datos=datos,
+        usuario_actual=usuario_actual,
     )
 
 

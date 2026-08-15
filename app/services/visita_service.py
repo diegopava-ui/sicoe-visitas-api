@@ -20,6 +20,8 @@ from app.repositories.visita_repository import (
         listar_visitas as listar_visitas_repository,
         reactivar_visita as reactivar_visita_repository,
 )
+from app.services.notificacion_programacion_service import programar_notificaciones_visita
+
 from app.schemas.visita import (
     EstadoVisita,
     TipoVisita,
@@ -215,10 +217,18 @@ def crear_visita(
     )
 
     try:
-        return guardar_visita(
+        visita_guardada = guardar_visita(
             db,
             visita,
         )
+        # La visita debe conservarse aunque no exista consentimiento
+        # o no sea posible programar mensajes. El servicio devuelve
+        # las omisiones sin interrumpir el registro principal.
+        programar_notificaciones_visita(
+            db,
+            visita_guardada,
+        )
+        return visita_guardada
 
     except IntegrityError as exc:
         db.rollback()
@@ -488,10 +498,25 @@ def actualizar_visita(
     visita.updated_by = usuario_actual_id
 
     try:
-        return actualizar_visita_repository(
+        visita_actualizada = actualizar_visita_repository(
             db,
             visita,
         )
+        campos_programacion = {
+            "asesor_id",
+            "tercero_id",
+            "fecha_visita",
+            "hora_inicio",
+            "estado",
+            "telefono_contacto",
+        }
+        if campos_programacion.intersection(cambios):
+            programar_notificaciones_visita(
+                db,
+                visita_actualizada,
+                reemplazar_pendientes=True,
+            )
+        return visita_actualizada
 
     except IntegrityError as exc:
         db.rollback()
