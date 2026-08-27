@@ -192,6 +192,24 @@ def crear_visita(
         or tercero.direccion
     )
 
+    # Heredar coordenadas ya geocodificadas del tercero cuando
+    # la visita no trae las suyas propias (mismo criterio que
+    # ciudad/departamento/dirección arriba).
+    datos_visita["latitud"] = (
+        datos_visita.get("latitud")
+        or tercero.latitud
+    )
+
+    datos_visita["longitud"] = (
+        datos_visita.get("longitud")
+        or tercero.longitud
+    )
+
+    datos_visita["fuente_ubicacion"] = (
+        datos_visita.get("fuente_ubicacion")
+        or tercero.fuente_ubicacion
+    )
+
     datos_visita["contacto_nombre"] = (
         datos_visita.get("contacto_nombre")
         or tercero.contacto_nombre

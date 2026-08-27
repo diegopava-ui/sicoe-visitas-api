@@ -26,6 +26,14 @@ from app.routers.agenda_agente import router as agenda_agente_router
 
 from fastapi.middleware.cors import CORSMiddleware
 
+from pathlib import Path
+
+from fastapi.staticfiles import StaticFiles
+
+from app.routers.catalogos import router as catalogos_router
+
+
+
 
 
 print("========== MAIN CARGADO ==========")
@@ -38,6 +46,8 @@ app = FastAPI(
     version=settings.app_version,
 )
 
+from app.routers.agenda_agente_proxima import router as agenda_agente_proxima_router
+
 app.include_router(asesores_router)
 app.include_router(usuarios_router)
 app.include_router(auth_router)
@@ -47,6 +57,17 @@ app.include_router(reportes_router)
 app.include_router(notificaciones_router)
 app.include_router(calendario_router)
 app.include_router(agenda_agente_router)
+app.include_router(agenda_agente_proxima_router)
+app.include_router(catalogos_router)
+
+UPLOADS_DIR = Path("uploads")
+UPLOADS_DIR.mkdir(exist_ok=True)
+#
+app.mount(
+    "/uploads",
+    StaticFiles(directory=str(UPLOADS_DIR)),
+    name="uploads",
+)
 
 
 @app.get("/")
@@ -85,4 +106,5 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 

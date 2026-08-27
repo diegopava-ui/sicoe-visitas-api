@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
@@ -19,7 +19,16 @@ from app.services.tercero_service import (
     listar_terceros,
     listar_terceros_por_tipo,
     obtener_tercero,
+    reactivar_tercero,
 )
+
+
+FiltroEstadoTercero = Literal[
+    "TODOS",
+    "ACTIVOS",
+    "INACTIVOS",
+]
+
 
 router = APIRouter(
     prefix="/api/v1/terceros",
@@ -33,12 +42,17 @@ router = APIRouter(
 )
 def get_terceros(
     pagination: Annotated[PaginationParams, Depends()],
+    estado: FiltroEstadoTercero = Query(
+        "TODOS",
+        description="Filtra por TODOS, ACTIVOS o INACTIVOS.",
+    ),
     db: Session = Depends(get_db),
 ):
     return listar_terceros(
         db=db,
         pagina=pagination.pagina,
         limite=pagination.limite,
+        estado=estado,
     )
 
 
@@ -48,9 +62,17 @@ def get_terceros(
 )
 def search_terceros(
     texto: str = Query(..., min_length=2),
+    estado: FiltroEstadoTercero = Query(
+        "TODOS",
+        description="Filtra por TODOS, ACTIVOS o INACTIVOS.",
+    ),
     db: Session = Depends(get_db),
 ):
-    return buscar_terceros(db, texto)
+    return buscar_terceros(
+        db,
+        texto,
+        estado=estado,
+    )
 
 
 @router.get(
@@ -115,6 +137,20 @@ def delete_tercero(
     db: Session = Depends(get_db),
 ):
     return eliminar_tercero(
+        db,
+        tercero_id,
+    )
+
+
+@router.patch(
+    "/{tercero_id}/reactivar",
+    response_model=TerceroResponse,
+)
+def patch_reactivar_tercero(
+    tercero_id: int,
+    db: Session = Depends(get_db),
+):
+    return reactivar_tercero(
         db,
         tercero_id,
     )

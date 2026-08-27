@@ -1,6 +1,7 @@
 from datetime import datetime
+from decimal import Decimal
 
-from sqlalchemy import Boolean, DateTime, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, Integer, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -70,6 +71,23 @@ class Tercero(Base):
     departamento: Mapped[str | None] = mapped_column(
         String(100),
         nullable=True,
+    )
+
+    latitud: Mapped[Decimal | None] = mapped_column(
+        Numeric(10, 7),
+        nullable=True,
+    )
+
+    longitud: Mapped[Decimal | None] = mapped_column(
+        Numeric(10, 7),
+        nullable=True,
+    )
+
+    fuente_ubicacion: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default="SIN_VALIDAR",
+        server_default="SIN_VALIDAR",
     )
 
     contacto_nombre: Mapped[str | None] = mapped_column(

@@ -25,6 +25,21 @@ from app.services.usuario_service import (
     restablecer_password_usuario,
 )
 
+from datetime import date
+#
+from fastapi import File, Form, HTTPException, UploadFile
+
+from app.schemas.usuario_certificado_arl import (
+    UsuarioCertificadoArlListado,
+    UsuarioCertificadoArlRespuesta,
+)
+
+from app.services.usuario_certificado_arl_service import (
+    crear_certificado_arl,
+    eliminar_certificado_arl,
+    listar_certificados_arl,
+)
+
 
 router = APIRouter(
     prefix="/api/v1/usuarios",
@@ -169,5 +184,116 @@ def desactivar_usuario_endpoint(
     return desactivar_usuario(
         db=db,
         usuario_id=usuario_id,
+        usuario_actual_id=usuario_actual.id,
+    )
+
+def _validar_acceso_certificado(
+    usuario_actual: Usuario,
+    usuario_id: int,
+) -> None:
+    if (
+        usuario_actual.rol != "ADMINISTRADOR"
+        and usuario_actual.id != usuario_id
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "No tiene permiso para gestionar el "
+                "certificado ARL de este usuario."
+            ),
+        )
+
+
+@router.post(
+    "/{usuario_id}/certificado-arl",
+    response_model=UsuarioCertificadoArlRespuesta,
+    status_code=status.HTTP_201_CREATED,
+    summary="Adjuntar certificado ARL de un usuario/asesor",
+)
+def subir_certificado_arl(
+    usuario_id: int,
+    archivo: UploadFile = File(...),
+    fecha_vigencia: date | None = Form(default=None),
+    db: Session = Depends(get_db),
+    usuario_actual: Usuario = Depends(
+        require_roles(
+            "ADMINISTRADOR",
+            "COORDINADOR",
+            "ASESOR",
+        )
+    ),
+) -> UsuarioCertificadoArlRespuesta:
+    _validar_acceso_certificado(
+        usuario_actual=usuario_actual,
+        usuario_id=usuario_id,
+    )
+
+    return crear_certificado_arl(
+        db=db,
+        usuario_id=usuario_id,
+        archivo=archivo,
+        fecha_vigencia=fecha_vigencia,
+        usuario_actual_id=usuario_actual.id,
+    )
+
+
+@router.get(
+    "/{usuario_id}/certificado-arl",
+    response_model=UsuarioCertificadoArlListado,
+    summary="Listar certificados ARL de un usuario/asesor",
+)
+def listar_certificado_arl_endpoint(
+    usuario_id: int,
+    db: Session = Depends(get_db),
+    usuario_actual: Usuario = Depends(
+        require_roles(
+            "ADMINISTRADOR",
+            "COORDINADOR",
+            "ASESOR",
+        )
+    ),
+) -> UsuarioCertificadoArlListado:
+    _validar_acceso_certificado(
+        usuario_actual=usuario_actual,
+        usuario_id=usuario_id,
+    )
+
+    resultados = listar_certificados_arl(
+        db=db,
+        usuario_id=usuario_id,
+    )
+
+    return UsuarioCertificadoArlListado(
+        resultados=resultados,
+        total=len(resultados),
+    )
+
+
+@router.delete(
+    "/{usuario_id}/certificado-arl/{certificado_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Eliminar (soft-delete) un certificado ARL",
+)
+def eliminar_certificado_arl_endpoint(
+    usuario_id: int,
+    certificado_id: int,
+    db: Session = Depends(get_db),
+    usuario_actual: Usuario = Depends(
+        require_roles(
+            "ADMINISTRADOR",
+            "COORDINADOR",
+            "ASESOR",
+        )
+    ),
+) -> None:
+    _validar_acceso_certificado(
+        usuario_actual=usuario_actual,
+        usuario_id=usuario_id,
+    )
+
+    eliminar_certificado_arl(
+        db=db,
+        usuario_id=usuario_id,
+        certificado_id=certificado_id,
         usuario_actual_id=usuario_actual.id,
     )

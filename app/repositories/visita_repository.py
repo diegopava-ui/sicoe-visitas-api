@@ -1,128 +1,13 @@
-﻿from datetime import date, datetime, timezone
+from datetime import date, datetime, timezone
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
+from app.models.tercero import Tercero
 from app.models.visita import Visita
 
-from sqlalchemy import or_
-from app.models.tercero import Tercero
-from app.repositories import tercero_repository
 
-
-def buscar_visita_por_id(
-    db: Session,
-    visita_id: int,
-) -> Visita | None:
-    return db.scalar(
-        select(Visita).where(
-            Visita.id == visita_id,
-            Visita.deleted_at.is_(None),
-        )
-    )
-
-
-def buscar_visita_por_id_incluyendo_eliminadas(
-    db: Session,
-    visita_id: int,
-) -> Visita | None:
-    return db.scalar(
-        select(Visita).where(
-            Visita.id == visita_id,
-        )
-    )
-
-
-def listar_visitas(
-    db: Session,
-    buscar: str | None = None,
-    asesor_id: int | None = None,
-    estado: str | None = None,
-    tipo_visita: str | None = None,
-    servicio: str | None = None,
-    fecha_inicio: date | None = None,
-    fecha_fin: date | None = None,
-    activo: bool | None = None,
-    tercero_id: int | None = None,
-    limite: int = 50,
-    offset: int = 0,
-) -> list[Visita]:
-    consulta = select(Visita).where(
-        Visita.deleted_at.is_(None),
-    )
-
-    if buscar:
-        patron = f"%{buscar.strip()}%"
-
-        query = query.filter(
-            or_(
-                Tercero.razon_social.ilike(patron),
-                Tercero.nombre_comercial.ilike(patron),
-                Tercero.identificacion.ilike(patron),
-                Visita.empresa.ilike(patron),
-                Visita.nit.ilike(patron),
-                Visita.servicio.ilike(patron),
-                Visita.objetivo.ilike(patron),
-            )
-        )
-
-    if asesor_id is not None:
-        consulta = consulta.where(
-            Visita.asesor_id == asesor_id,
-        )
-
-    if estado is not None:
-        consulta = consulta.where(
-            Visita.estado == estado,
-        )
-
-    if tipo_visita is not None:
-        consulta = consulta.where(
-            Visita.tipo_visita == tipo_visita,
-        )
-
-    if servicio is not None:
-        consulta = consulta.where(
-            Visita.servicio.ilike(f"%{servicio.strip()}%"),
-        )
-
-    if fecha_inicio is not None:
-        consulta = consulta.where(
-            Visita.fecha_visita >= fecha_inicio,
-        )
-
-    if fecha_fin is not None:
-        consulta = consulta.where(
-            Visita.fecha_visita <= fecha_fin,
-        )
-
-    if tercero_id is not None:
-            query = query.filter(
-            Visita.tercero_id == tercero_id,
-        )    
-
-    if activo is not None:
-        consulta = consulta.where(
-            Visita.activo.is_(activo),
-        )
-
-    consulta = (
-        consulta
-        .order_by(
-            Visita.fecha_visita.desc(),
-            Visita.id.desc(),
-        )
-        .offset(offset)
-        .limit(limite)
-    )
-
-    return list(
-        db.scalars(consulta).all()
-    )
-
-
-def contar_visitas(
-    db: Session,
+def _consulta_visitas(
     buscar: str | None = None,
     asesor_id: int | None = None,
     tercero_id: int | None = None,
@@ -132,14 +17,9 @@ def contar_visitas(
     fecha_inicio: date | None = None,
     fecha_fin: date | None = None,
     activo: bool | None = None,
-) -> int:
+):
     consulta = (
-        select(
-            func.count(
-                func.distinct(Visita.id)
-            )
-        )
-        .select_from(Visita)
+        select(Visita)
         .outerjoin(
             Tercero,
             Visita.tercero_id == Tercero.id,
@@ -151,7 +31,6 @@ def contar_visitas(
             Visita.activo.is_(True),
             Visita.deleted_at.is_(None),
         )
-
     elif activo is False:
         consulta = consulta.where(
             or_(
@@ -201,7 +80,7 @@ def contar_visitas(
         consulta = consulta.where(
             Visita.servicio.ilike(
                 f"%{servicio.strip()}%"
-            )
+            ),
         )
 
     if fecha_inicio is not None:
@@ -214,9 +93,109 @@ def contar_visitas(
             Visita.fecha_visita <= fecha_fin,
         )
 
-    return int(
-        db.scalar(consulta) or 0
+    return consulta
+
+
+def buscar_visita_por_id(
+    db: Session,
+    visita_id: int,
+) -> Visita | None:
+    return db.scalar(
+        select(Visita).where(
+            Visita.id == visita_id,
+            Visita.activo.is_(True),
+            Visita.deleted_at.is_(None),
+        )
     )
+
+
+def buscar_visita_por_id_incluyendo_eliminadas(
+    db: Session,
+    visita_id: int,
+) -> Visita | None:
+    return db.scalar(
+        select(Visita).where(
+            Visita.id == visita_id,
+        )
+    )
+
+
+def listar_visitas(
+    db: Session,
+    buscar: str | None = None,
+    asesor_id: int | None = None,
+    tercero_id: int | None = None,
+    estado: str | None = None,
+    tipo_visita: str | None = None,
+    servicio: str | None = None,
+    fecha_inicio: date | None = None,
+    fecha_fin: date | None = None,
+    activo: bool | None = None,
+    limite: int = 50,
+    offset: int = 0,
+) -> list[Visita]:
+    consulta = _consulta_visitas(
+        buscar=buscar,
+        asesor_id=asesor_id,
+        tercero_id=tercero_id,
+        estado=estado,
+        tipo_visita=tipo_visita,
+        servicio=servicio,
+        fecha_inicio=fecha_inicio,
+        fecha_fin=fecha_fin,
+        activo=activo,
+    )
+
+    consulta = (
+        consulta
+        .order_by(
+            Visita.fecha_visita.desc(),
+            Visita.id.desc(),
+        )
+        .offset(offset)
+        .limit(limite)
+    )
+
+    return list(
+        db.scalars(consulta).unique().all()
+    )
+
+
+def contar_visitas(
+    db: Session,
+    buscar: str | None = None,
+    asesor_id: int | None = None,
+    tercero_id: int | None = None,
+    estado: str | None = None,
+    tipo_visita: str | None = None,
+    servicio: str | None = None,
+    fecha_inicio: date | None = None,
+    fecha_fin: date | None = None,
+    activo: bool | None = None,
+) -> int:
+    subconsulta = _consulta_visitas(
+        buscar=buscar,
+        asesor_id=asesor_id,
+        tercero_id=tercero_id,
+        estado=estado,
+        tipo_visita=tipo_visita,
+        servicio=servicio,
+        fecha_inicio=fecha_inicio,
+        fecha_fin=fecha_fin,
+        activo=activo,
+    ).with_only_columns(
+        Visita.id,
+    ).distinct().subquery()
+
+    return int(
+        db.scalar(
+            select(func.count()).select_from(
+                subconsulta
+            )
+        )
+        or 0
+    )
+
 
 def guardar_visita(
     db: Session,
@@ -281,6 +260,7 @@ def contar_visitas_por_estado(
             func.count(Visita.id),
         )
         .where(
+            Visita.activo.is_(True),
             Visita.deleted_at.is_(None),
         )
         .group_by(
@@ -312,6 +292,7 @@ def contar_visitas_por_asesor(
             func.count(Visita.id),
         )
         .where(
+            Visita.activo.is_(True),
             Visita.deleted_at.is_(None),
         )
         .group_by(

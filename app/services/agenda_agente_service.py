@@ -1,11 +1,12 @@
-import calendar
 import re
 import unicodedata
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.models.asesor import Asesor
 from app.models.usuario import Usuario
 from app.services.calendario_service import listar_eventos
 from app.schemas.agenda_agente import (
@@ -16,7 +17,17 @@ from app.schemas.agenda_agente import (
 
 ZONA_COLOMBIA = ZoneInfo("America/Bogota")
 
-MESES = {
+ROLES_SUPERVISOR = (
+    "ADMINISTRADOR",
+    "COORDINADOR",
+)
+
+# Sentinel usado como "titular" cuando la consulta abarca
+# a todos los asesores (equipo completo), en vez de a un
+# asesor puntual. No es un id real de asesor.
+TITULAR_EQUIPO = "EQUIPO"
+
+_MESES = {
     "enero": 1,
     "febrero": 2,
     "marzo": 3,
@@ -26,10 +37,149 @@ MESES = {
     "julio": 7,
     "agosto": 8,
     "septiembre": 9,
+    "setiembre": 9,
     "octubre": 10,
     "noviembre": 11,
     "diciembre": 12,
 }
+
+_PATRON_FECHA_TEXTUAL = re.compile(
+    r"\b(\d{1,2})\s+de\s+("
+    + "|".join(_MESES.keys())
+    + r")(?:\s+de\s+(\d{4}))?\b"
+)
+
+_PATRON_FECHA_NUMERICA = re.compile(
+    r"\b(\d{1,2})[/\-](\d{1,2})(?:[/\-](\d{4}))?\b"
+)
+
+
+def _extraer_fecha_especifica(
+    texto: str,
+    hoy: date,
+) -> date | None:
+    """
+    Reconoce fechas explícitas mencionadas en la pregunta,
+    por ejemplo:
+    - "el 25 de agosto"
+    - "25 de agosto de 2026"
+    - "25/08" o "25/08/2026"
+
+    Si no se indica el año, se asume el año actual.
+    Devuelve None si no se encuentra ninguna fecha o si la
+    fecha no es válida (ej. "31 de febrero").
+    """
+
+    coincidencia = _PATRON_FECHA_TEXTUAL.search(texto)
+
+    if coincidencia:
+        dia = int(coincidencia.group(1))
+        mes = _MESES[coincidencia.group(2)]
+        anio = (
+            int(coincidencia.group(3))
+            if coincidencia.group(3)
+            else hoy.year
+        )
+
+        try:
+            return date(anio, mes, dia)
+        except ValueError:
+            return None
+
+    coincidencia = _PATRON_FECHA_NUMERICA.search(texto)
+
+    if coincidencia:
+        dia = int(coincidencia.group(1))
+        mes = int(coincidencia.group(2))
+        anio = (
+            int(coincidencia.group(3))
+            if coincidencia.group(3)
+            else hoy.year
+        )
+
+        if mes < 1 or mes > 12:
+            return None
+
+        try:
+            return date(anio, mes, dia)
+        except ValueError:
+            return None
+
+    return None
+
+
+def _fecha_legible(valor: date) -> str:
+    dias_semana = (
+        "lunes",
+        "martes",
+        "miércoles",
+        "jueves",
+        "viernes",
+        "sábado",
+        "domingo",
+    )
+
+    nombres_mes = (
+        "enero", "febrero", "marzo", "abril", "mayo", "junio",
+        "julio", "agosto", "septiembre", "octubre", "noviembre",
+        "diciembre",
+    )
+
+    return (
+        f"{dias_semana[valor.weekday()]} "
+        f"{valor.day} de {nombres_mes[valor.month - 1]}"
+    )
+
+
+_PATRON_MES_COMPLETO = re.compile(
+    r"\ben\s+("
+    + "|".join(_MESES.keys())
+    + r")(?:\s+de\s+(\d{4}))?\b"
+)
+
+
+def _ultimo_dia_mes(anio: int, mes: int) -> date:
+    if mes == 12:
+        siguiente = date(anio + 1, 1, 1)
+    else:
+        siguiente = date(anio, mes + 1, 1)
+
+    return siguiente - timedelta(days=1)
+
+
+def _extraer_mes_completo(
+    texto: str,
+    hoy: date,
+) -> tuple[date, date, str] | None:
+    """
+    Reconoce referencias a un mes completo sin día
+    puntual, por ejemplo "en septiembre" o "en
+    septiembre de 2026". Devuelve (desde, hasta,
+    nombre_mes) o None si no aplica.
+
+    Se evalúa DESPUÉS de _extraer_fecha_especifica,
+    así que una fecha puntual como "25 de agosto"
+    siempre tiene prioridad sobre esta coincidencia
+    más amplia.
+    """
+
+    coincidencia = _PATRON_MES_COMPLETO.search(texto)
+
+    if not coincidencia:
+        return None
+
+    nombre_mes = coincidencia.group(1)
+    mes = _MESES[nombre_mes]
+    anio = (
+        int(coincidencia.group(2))
+        if coincidencia.group(2)
+        else hoy.year
+    )
+
+    desde = date(anio, mes, 1)
+    hasta = _ultimo_dia_mes(anio, mes)
+
+    return desde, hasta, nombre_mes
 
 
 def _normalizar(texto: str) -> str:
@@ -132,11 +282,101 @@ def _ubicacion_texto(visita: AgendaAgenteVisita) -> str:
     return ubicacion or "sin ubicación registrada"
 
 
+def _sujeto_posesivo(titular: str | None) -> str:
+    """
+    'tu' / 'del equipo' / 'de Natalia Martínez'
+    """
+    if titular is None:
+        return "tu"
+
+    if titular == TITULAR_EQUIPO:
+        return "del equipo"
+
+    return f"de {titular}"
+
+
+def _verbo_tener(titular: str | None) -> str:
+    """
+    'Tienes' / 'El equipo tiene' / 'Natalia Martínez tiene'
+    """
+    if titular is None:
+        return "Tienes"
+
+    if titular == TITULAR_EQUIPO:
+        return "El equipo tiene"
+
+    return f"{titular} tiene"
+
+
+def _verbo_no_tener(titular: str | None) -> str:
+    """
+    'No tienes' / 'El equipo no tiene' / 'Natalia Martínez no tiene'
+    """
+    if titular is None:
+        return "No tienes"
+
+    if titular == TITULAR_EQUIPO:
+        return "El equipo no tiene"
+
+    return f"{titular} no tiene"
+
+
+def _articulo_posesivo(titular: str | None) -> str:
+    """
+    'Tu' / 'La' (para 'La siguiente visita del equipo/de Natalia')
+    """
+    if titular is None:
+        return "Tu"
+
+    return "La"
+
+
+def _de_quien(titular: str | None) -> str:
+    """
+    '' / ' del equipo' / ' de Natalia Martínez'
+    """
+    if titular is None:
+        return ""
+
+    if titular == TITULAR_EQUIPO:
+        return " del equipo"
+
+    return f" de {titular}"
+
+
 def _resumen_visitas(
     visitas: list[AgendaAgenteVisita],
+    estado: str | None = None,
+    ciudad: str | None = None,
+    titular: str | None = None,
 ) -> str:
     if not visitas:
-        return "No tienes visitas programadas para ese período."
+        etiquetas_estado = {
+            "PROGRAMADA": "programadas",
+            "EN_PROCESO": "en proceso",
+            "FINALIZADA": "finalizadas",
+            "CANCELADA": "canceladas",
+        }
+
+        ciudad_texto = None
+        if ciudad and _normalizar(ciudad) != "sin_ciudad":
+            ciudad_texto = ciudad.strip()
+
+        no_tiene = _verbo_no_tener(titular)
+
+        if estado:
+            etiqueta = etiquetas_estado.get(estado, estado.lower())
+            if ciudad_texto:
+                return (
+                    f"{no_tiene} visitas {etiqueta} en "
+                    f"{ciudad_texto} para ese período."
+                )
+            return f"{no_tiene} visitas {etiqueta} para ese período."
+
+        if ciudad_texto:
+            return f"{no_tiene} visitas en {ciudad_texto} para ese período."
+
+        return f"{no_tiene} visitas para ese período."
 
     lineas: list[str] = []
 
@@ -150,12 +390,12 @@ def _resumen_visitas(
             )
         )
 
+    tiene = _verbo_tener(titular)
+
     if len(visitas) == 1:
-        encabezado = "Tienes 1 visita: "
+        encabezado = f"{tiene} 1 visita: "
     else:
-        encabezado = (
-            f"Tienes {len(visitas)} visitas: "
-        )
+        encabezado = f"{tiene} {len(visitas)} visitas: "
 
     return encabezado + " ".join(lineas)
 
@@ -171,119 +411,12 @@ def _inicio_fin_semana(
     return inicio, fin
 
 
-def _inicio_fin_mes(
-    anio: int,
-    mes: int,
-) -> tuple[date, date]:
-    ultimo = calendar.monthrange(anio, mes)[1]
-    return (
-        date(anio, mes, 1),
-        date(anio, mes, ultimo),
-    )
-
-
-def _mes_explicito(
-    texto: str,
-    hoy: date,
-) -> tuple[int, int] | None:
-    """
-    Extrae un mes escrito en español y resuelve el año.
-
-    Si no se escribe el año, se interpreta el próximo
-    mes con ese nombre dentro de una agenda futura.
-    Para el mes actual se conserva el año actual.
-    """
-
-    for nombre, numero in MESES.items():
-        if not re.search(rf"\b{nombre}\b", texto):
-            continue
-
-        coincidencia_anio = re.search(
-            rf"\b{nombre}\s+(20\d{{2}})\b",
-            texto,
-        )
-
-        if coincidencia_anio:
-            return numero, int(
-                coincidencia_anio.group(1)
-            )
-
-        anio = hoy.year
-
-        if numero < hoy.month:
-            anio += 1
-
-        return numero, anio
-
-    return None
-
-
-def _es_resto_mes(texto: str) -> bool:
-    expresiones = (
-        "resto de",
-        "resto del mes",
-        "resto de este mes",
-        "lo que queda de",
-        "lo que queda del mes",
-        "lo que queda este mes",
-        "de aqui a fin de mes",
-        "hasta fin de mes",
-    )
-
-    return any(
-        expresion in texto
-        for expresion in expresiones
-    )
-
-
-def _respuesta_rango(
-    db: Session,
-    asesor_id: int,
-    desde: date,
-    hasta: date,
-    intencion: str,
-) -> AgendaAgenteRespuesta:
-    eventos = _consultar(
-        db,
-        asesor_id,
-        desde,
-        hasta,
-    )
-
-    visitas = [
-        _convertir_visita(evento)
-        for evento in eventos
-    ]
-
-    return AgendaAgenteRespuesta(
-        respuesta=_resumen_visitas(visitas),
-        intencion=intencion,
-        fecha_desde=desde,
-        fecha_hasta=hasta,
-        total_visitas=len(visitas),
-        visitas=visitas,
-    )
-
-
-def _respuesta_periodo_no_interpretado() -> AgendaAgenteRespuesta:
-    return AgendaAgenteRespuesta(
-        respuesta=(
-            "Entendí que preguntas por tu agenda, pero no "
-            "pude identificar con seguridad el período. "
-            "Puedes preguntarme, por ejemplo: hoy, mañana, "
-            "esta semana, este mes, el resto de agosto, "
-            "septiembre o mi próxima visita."
-        ),
-        intencion="PERIODO_NO_INTERPRETADO",
-        fuera_de_dominio=False,
-    )
-
-
 def _consultar(
     db: Session,
-    asesor_id: int,
+    asesor_id: int | None,
     desde: date,
     hasta: date,
+    estado: str | None = None,
 ) -> list:
     return _ordenar_eventos(
         listar_eventos(
@@ -291,8 +424,69 @@ def _consultar(
             desde=desde,
             hasta=hasta,
             asesor_id=asesor_id,
+            estado=estado,
         )
     )
+
+
+def _fin_mes(referencia: date) -> date:
+    if referencia.month == 12:
+        siguiente = date(referencia.year + 1, 1, 1)
+    else:
+        siguiente = date(
+            referencia.year,
+            referencia.month + 1,
+            1,
+        )
+
+    return siguiente - timedelta(days=1)
+
+
+def _resolver_periodo(
+    periodo: str,
+    hoy: date,
+) -> tuple[date, date] | None:
+    if periodo == "HOY":
+        return hoy, hoy
+
+    if periodo == "MANANA":
+        manana = hoy + timedelta(days=1)
+        return manana, manana
+
+    if periodo == "ESTA_SEMANA":
+        return _inicio_fin_semana(hoy)
+
+    if periodo == "RESTO_SEMANA":
+        _, fin = _inicio_fin_semana(hoy)
+        return hoy, fin
+
+    if periodo == "ESTE_MES":
+        inicio = date(hoy.year, hoy.month, 1)
+        return inicio, _fin_mes(hoy)
+
+    if periodo == "RESTO_MES":
+        return hoy, _fin_mes(hoy)
+
+    return None
+
+
+def _filtrar_ciudad(
+    eventos: list,
+    ciudad: str | None,
+) -> list:
+    if not ciudad or _normalizar(ciudad) == "sin_ciudad":
+        return eventos
+
+    ciudad_objetivo = _normalizar(ciudad)
+
+    return [
+        evento
+        for evento in eventos
+        if evento.ubicacion
+        and evento.ubicacion.ciudad
+        and _normalizar(evento.ubicacion.ciudad)
+        == ciudad_objetivo
+    ]
 
 
 def _respuesta_fuera_dominio() -> AgendaAgenteRespuesta:
@@ -318,12 +512,24 @@ def _respuesta_solo_mi_agenda() -> AgendaAgenteRespuesta:
     )
 
 
+def _respuesta_sin_asesor() -> AgendaAgenteRespuesta:
+    return AgendaAgenteRespuesta(
+        respuesta=(
+            "Tu usuario no tiene un asesor asociado. "
+            "No puedo consultar una agenda personal "
+            "hasta que se configure esa asociación."
+        ),
+        intencion="USUARIO_SIN_ASESOR",
+    )
+
+
 def _parece_consulta_otro_asesor(
     texto: str,
 ) -> bool:
     """
     Detecta intentos explícitos de consultar la agenda
-    de otra persona.
+    de otra persona. Usado SOLO para el rol ASESOR
+    (bloqueo por privacidad entre compañeros).
 
     Ejemplos:
     - agenda de Natalia
@@ -339,18 +545,9 @@ def _parece_consulta_otro_asesor(
         r"\bque tiene [a-z][a-z\s]{1,60}(?: hoy| manana| esta semana)?\b",
     )
 
-    # Evitar falsos positivos sobre expresiones propias.
-    referencias_propias = (
-        "mi agenda",
-        "mis visitas",
-        "que visitas tengo",
-        "que tengo hoy",
-        "que tengo manana",
-    )
-
     if any(
         referencia in texto
-        for referencia in referencias_propias
+        for referencia in _REFERENCIAS_PROPIAS
     ):
         return False
 
@@ -360,35 +557,289 @@ def _parece_consulta_otro_asesor(
     )
 
 
-def _es_dominio_agenda(texto: str) -> bool:
-    palabras = (
-        "agenda",
-        "visita",
-        "visitas",
-        "tengo hoy",
-        "tengo manana",
-        "tengo mañana",
-        "proxima",
-        "proximo",
-        "siguiente",
-        "horario",
-        "ubicacion",
-        "ubicación",
-        "donde queda",
-        "dónde queda",
-        "a que hora",
-        "qué hora",
-        "termino hoy",
-        "semana",
-        "mes",
-        "resto",
-        "fin de mes",
-        *MESES.keys(),
+_REFERENCIAS_PROPIAS = (
+    "mi agenda",
+    "mis visitas",
+    "que visitas tengo",
+    "que tengo hoy",
+    "que tengo manana",
+)
+
+
+_PATRONES_NOMBRE_ASESOR = (
+    r"\bagenda de ([a-z][a-z\s]{1,60})",
+    r"\bvisitas de ([a-z][a-z\s]{1,60})",
+    r"\bque visitas tiene ([a-z][a-z\s]{1,60})",
+    r"\bque tiene ([a-z][a-z\s]{1,60})",
+)
+
+_SUFIJOS_TIEMPO = (
+    "hoy",
+    "manana",
+    "esta semana",
+    "para hoy",
+    "para manana",
+)
+
+
+def _extraer_nombre_asesor_consultado(
+    texto: str,
+) -> str | None:
+    """
+    Usado SOLO para roles supervisores (ADMINISTRADOR/
+    COORDINADOR). Extrae el nombre mencionado en preguntas
+    como 'agenda de Natalia hoy' -> 'natalia'.
+
+    Devuelve None si la pregunta es sobre la propia agenda
+    del usuario (mi agenda, mis visitas...) o si no se
+    detecta ningún nombre.
+    """
+
+    if any(
+        referencia in texto
+        for referencia in _REFERENCIAS_PROPIAS
+    ):
+        return None
+
+    for patron in _PATRONES_NOMBRE_ASESOR:
+        coincidencia = re.search(patron, texto)
+
+        if not coincidencia:
+            continue
+
+        nombre = coincidencia.group(1).strip()
+
+        for sufijo in _SUFIJOS_TIEMPO:
+            if nombre.endswith(sufijo):
+                nombre = nombre[: -len(sufijo)].strip()
+
+        return nombre or None
+
+    return None
+
+
+def _nombre_completo_asesor(asesor: Asesor) -> str:
+    partes = [
+        asesor.primer_nombre,
+        asesor.segundo_nombre,
+        asesor.primer_apellido,
+        asesor.segundo_apellido,
+    ]
+
+    return " ".join(
+        parte.strip()
+        for parte in partes
+        if parte and parte.strip()
     )
 
-    return any(
-        palabra in texto
-        for palabra in palabras
+
+def _buscar_asesores_por_nombre(
+    db: Session,
+    nombre_consulta: str,
+) -> list[Asesor]:
+    objetivo = _normalizar(nombre_consulta)
+
+    if not objetivo:
+        return []
+
+    asesores = db.scalars(
+        select(Asesor).where(Asesor.activo.is_(True))
+    ).all()
+
+    coincidencias = []
+
+    for asesor in asesores:
+        nombre_completo = _normalizar(
+            _nombre_completo_asesor(asesor)
+        )
+
+        partes_normalizadas = [
+            _normalizar(parte)
+            for parte in (
+                asesor.primer_nombre,
+                asesor.segundo_nombre,
+                asesor.primer_apellido,
+                asesor.segundo_apellido,
+            )
+            if parte
+        ]
+
+        if (
+            objetivo in nombre_completo
+            or objetivo in partes_normalizadas
+        ):
+            coincidencias.append(asesor)
+
+    return coincidencias
+
+
+def _resolver_alcance_supervisor(
+    db: Session,
+    usuario_actual: Usuario,
+    texto: str,
+) -> tuple[int | None, str | None, AgendaAgenteRespuesta | None]:
+    """
+    Determina de quién es la agenda que un ADMINISTRADOR
+    o COORDINADOR está consultando.
+
+    Devuelve (asesor_id_filtro, titular, respuesta_error):
+    - Si respuesta_error no es None, hay que devolverla
+      inmediatamente sin continuar.
+    - asesor_id_filtro=None significa "todos los asesores"
+      (titular=TITULAR_EQUIPO en ese caso).
+    """
+
+    nombre_consulta = _extraer_nombre_asesor_consultado(texto)
+
+    if nombre_consulta:
+        encontrados = _buscar_asesores_por_nombre(
+            db,
+            nombre_consulta,
+        )
+
+        if not encontrados:
+            return (
+                None,
+                None,
+                AgendaAgenteRespuesta(
+                    respuesta=(
+                        f'No encontré ningún asesor activo '
+                        f'llamado "{nombre_consulta}".'
+                    ),
+                    intencion="ASESOR_NO_ENCONTRADO",
+                ),
+            )
+
+        if len(encontrados) > 1:
+            nombres = ", ".join(
+                _nombre_completo_asesor(asesor)
+                for asesor in encontrados
+            )
+
+            return (
+                None,
+                None,
+                AgendaAgenteRespuesta(
+                    respuesta=(
+                        f'Hay varios asesores que coinciden '
+                        f'con "{nombre_consulta}": {nombres}. '
+                        f'¿Puedes ser más específico?'
+                    ),
+                    intencion="ASESOR_AMBIGUO",
+                ),
+            )
+
+        asesor = encontrados[0]
+
+        return (
+            asesor.id,
+            _nombre_completo_asesor(asesor),
+            None,
+        )
+
+    es_consulta_propia = any(
+        referencia in texto
+        for referencia in _REFERENCIAS_PROPIAS
+    )
+
+    if (
+        es_consulta_propia
+        and usuario_actual.asesor_id is not None
+    ):
+        return (
+            usuario_actual.asesor_id,
+            None,
+            None,
+        )
+
+    # Sin nombre puntual: agenda combinada de todo el equipo.
+    return (
+        None,
+        TITULAR_EQUIPO,
+        None,
+    )
+
+
+def consultar_agenda_estructurada(
+    db: Session,
+    usuario_actual: Usuario,
+    periodo: str,
+    ciudad: str = "SIN_CIUDAD",
+    estado: str = "SIN_ESTADO",
+) -> AgendaAgenteRespuesta:
+    """
+    Consulta operativa para n8n.
+
+    Seguridad:
+    - No recibe asesor_id explícito en el request.
+    - ASESOR: siempre usa usuario_actual.asesor_id (propio).
+    - ADMINISTRADOR/COORDINADOR: si no tienen asesor_id
+      propio, consultan la agenda combinada de todo el
+      equipo en vez de recibir un bloqueo.
+    """
+
+    es_supervisor = usuario_actual.rol in ROLES_SUPERVISOR
+
+    if usuario_actual.asesor_id is None and not es_supervisor:
+        return _respuesta_sin_asesor()
+
+    asesor_id_filtro = usuario_actual.asesor_id
+    titular = None
+
+    if usuario_actual.asesor_id is None and es_supervisor:
+        asesor_id_filtro = None
+        titular = TITULAR_EQUIPO
+
+    hoy = datetime.now(ZONA_COLOMBIA).date()
+    rango = _resolver_periodo(periodo, hoy)
+
+    if rango is None:
+        return AgendaAgenteRespuesta(
+            respuesta=(
+                "Indícame el período de la agenda que deseas "
+                "consultar, por ejemplo hoy, mañana, esta "
+                "semana o este mes."
+            ),
+            intencion="FALTA_PERIODO",
+        )
+
+    desde, hasta = rango
+    estado_filtro = (
+        None
+        if estado == "SIN_ESTADO"
+        else estado
+    )
+
+    eventos = _consultar(
+        db=db,
+        asesor_id=asesor_id_filtro,
+        desde=desde,
+        hasta=hasta,
+        estado=estado_filtro,
+    )
+
+    eventos = _filtrar_ciudad(
+        eventos,
+        ciudad,
+    )
+
+    visitas = [
+        _convertir_visita(evento)
+        for evento in eventos
+    ]
+
+    return AgendaAgenteRespuesta(
+        respuesta=_resumen_visitas(
+            visitas,
+            estado=estado_filtro,
+            ciudad=ciudad,
+            titular=titular,
+        ),
+        intencion="CONSULTAR_AGENDA",
+        fecha_desde=desde,
+        fecha_hasta=hasta,
+        total_visitas=len(visitas),
+        visitas=visitas,
     )
 
 
@@ -398,137 +849,166 @@ def responder_pregunta_agenda(
     pregunta: str,
 ) -> AgendaAgenteRespuesta:
     """
-    Motor cerrado de Agenda.
+    Motor de Agenda.
 
-    Regla crítica:
-    - No acepta asesor_id desde request.
-    - Siempre usa usuario_actual.asesor_id.
-    - Por lo tanto no puede consultar otro asesor.
+    - ASESOR: dominio cerrado a su propia agenda. No puede
+      consultar la agenda de otro asesor.
+    - ADMINISTRADOR/COORDINADOR: pueden consultar la agenda
+      combinada de todo el equipo, o la de un asesor
+      específico mencionándolo por nombre
+      (ej. "agenda de Natalia hoy").
     """
 
     texto = _normalizar(pregunta)
 
-    # Primero se aplica la política del dominio.
-    # Así, incluso un usuario sin asesor asociado recibe
-    # la respuesta de seguridad correcta si intenta
-    # consultar a otra persona o salir del dominio Agenda.
-    if _parece_consulta_otro_asesor(texto):
+    es_supervisor = usuario_actual.rol in ROLES_SUPERVISOR
+
+    if (
+        not es_supervisor
+        and _parece_consulta_otro_asesor(texto)
+    ):
         return _respuesta_solo_mi_agenda()
 
     if not _es_dominio_agenda(texto):
         return _respuesta_fuera_dominio()
 
-    # Solo después se valida si el usuario tiene una
-    # agenda personal que pueda ser consultada.
-    if usuario_actual.asesor_id is None:
-        return AgendaAgenteRespuesta(
-            respuesta=(
-                "Tu usuario no tiene un asesor asociado. "
-                "No puedo consultar una agenda personal "
-                "hasta que se configure esa asociación."
-            ),
-            intencion="USUARIO_SIN_ASESOR",
+    if es_supervisor:
+        (
+            asesor_id,
+            titular,
+            error,
+        ) = _resolver_alcance_supervisor(
+            db,
+            usuario_actual,
+            texto,
         )
+
+        if error is not None:
+            return error
+    else:
+        if usuario_actual.asesor_id is None:
+            return _respuesta_sin_asesor()
+
+        asesor_id = usuario_actual.asesor_id
+        titular = None
 
     hoy = datetime.now(
         ZONA_COLOMBIA
     ).date()
 
-    asesor_id = usuario_actual.asesor_id
+    fecha_especifica = _extraer_fecha_especifica(
+        texto,
+        hoy,
+    )
 
-    # RANGOS MENSUALES EXPLÍCITOS.
-    # Se procesan antes de HOY para evitar que una frase
-    # válida como "resto de agosto" caiga por defecto
-    # en la consulta del día actual.
-    mes_explicito = _mes_explicito(texto, hoy)
-
-    if mes_explicito is not None:
-        mes, anio = mes_explicito
-        inicio_mes, fin_mes = _inicio_fin_mes(
-            anio,
-            mes,
-        )
-
-        desde = inicio_mes
-
-        if (
-            _es_resto_mes(texto)
-            and anio == hoy.year
-            and mes == hoy.month
-        ):
-            desde = hoy
-
-        intencion = (
-            "AGENDA_RESTO_MES"
-            if _es_resto_mes(texto)
-            else "AGENDA_MES"
-        )
-
-        return _respuesta_rango(
+    if fecha_especifica is not None:
+        eventos = _consultar(
             db,
             asesor_id,
-            desde,
-            fin_mes,
-            intencion,
+            fecha_especifica,
+            fecha_especifica,
         )
 
-    if (
-        "proximo mes" in texto
-        or "mes siguiente" in texto
-    ):
-        if hoy.month == 12:
-            mes = 1
-            anio = hoy.year + 1
+        visitas = [
+            _convertir_visita(evento)
+            for evento in eventos
+        ]
+
+        no_tiene = _verbo_no_tener(titular)
+        tiene = _verbo_tener(titular)
+        fecha_texto = _fecha_legible(fecha_especifica)
+
+        if not visitas:
+            respuesta = (
+                f"{no_tiene} visitas programadas "
+                f"para el {fecha_texto}."
+            )
+        elif len(visitas) == 1:
+            respuesta = (
+                f"{tiene} 1 visita el {fecha_texto}: "
+                + " ".join(
+                    f"{_hora_texto(v.hora_inicio)} "
+                    f"{v.codigo}, {v.empresa}, "
+                    f"{_ubicacion_texto(v)}."
+                    for v in visitas
+                )
+            )
         else:
-            mes = hoy.month + 1
-            anio = hoy.year
+            respuesta = (
+                f"{tiene} {len(visitas)} visitas "
+                f"el {fecha_texto}: "
+                + " ".join(
+                    f"{_hora_texto(v.hora_inicio)} "
+                    f"{v.codigo}, {v.empresa}, "
+                    f"{_ubicacion_texto(v)}."
+                    for v in visitas
+                )
+            )
 
-        desde, hasta = _inicio_fin_mes(
-            anio,
-            mes,
+        return AgendaAgenteRespuesta(
+            respuesta=respuesta,
+            intencion="AGENDA_FECHA_ESPECIFICA",
+            fecha_desde=fecha_especifica,
+            fecha_hasta=fecha_especifica,
+            total_visitas=len(visitas),
+            visitas=visitas,
         )
 
-        return _respuesta_rango(
+    mes_completo = _extraer_mes_completo(
+        texto,
+        hoy,
+    )
+
+    if mes_completo is not None:
+        desde, hasta, nombre_mes = mes_completo
+
+        eventos = _consultar(
             db,
             asesor_id,
             desde,
             hasta,
-            "AGENDA_PROXIMO_MES",
         )
 
-    if (
-        "este mes" in texto
-        or "mes actual" in texto
-        or "resto del mes" in texto
-        or "resto de este mes" in texto
-        or "lo que queda del mes" in texto
-        or "lo que queda este mes" in texto
-        or "de aqui a fin de mes" in texto
-        or "hasta fin de mes" in texto
-    ):
-        inicio_mes, fin_mes = _inicio_fin_mes(
-            hoy.year,
-            hoy.month,
-        )
+        visitas = [
+            _convertir_visita(evento)
+            for evento in eventos
+        ]
 
-        desde = (
-            hoy
-            if _es_resto_mes(texto)
-            else inicio_mes
-        )
+        no_tiene = _verbo_no_tener(titular)
+        tiene = _verbo_tener(titular)
 
-        intencion = (
-            "AGENDA_RESTO_MES"
-            if _es_resto_mes(texto)
-            else "AGENDA_MES"
-        )
+        if not visitas:
+            respuesta = (
+                f"{no_tiene} visitas programadas "
+                f"en {nombre_mes}."
+            )
+        else:
+            lineas = " ".join(
+                f"{v.fecha.strftime('%d/%m')} "
+                f"{_hora_texto(v.hora_inicio)} "
+                f"{v.codigo}, {v.empresa}, "
+                f"{_ubicacion_texto(v)}."
+                for v in visitas
+            )
 
-        return _respuesta_rango(
-            db,
-            asesor_id,
-            desde,
-            fin_mes,
-            intencion,
+            if len(visitas) == 1:
+                respuesta = (
+                    f"{tiene} 1 visita en {nombre_mes}: "
+                    f"{lineas}"
+                )
+            else:
+                respuesta = (
+                    f"{tiene} {len(visitas)} visitas "
+                    f"en {nombre_mes}: {lineas}"
+                )
+
+        return AgendaAgenteRespuesta(
+            respuesta=respuesta,
+            intencion="AGENDA_MES_ESPECIFICO",
+            fecha_desde=desde,
+            fecha_hasta=hasta,
+            total_visitas=len(visitas),
+            visitas=visitas,
         )
 
     if "manana" in texto:
@@ -547,7 +1027,10 @@ def responder_pregunta_agenda(
         ]
 
         return AgendaAgenteRespuesta(
-            respuesta=_resumen_visitas(visitas),
+            respuesta=_resumen_visitas(
+                visitas,
+                titular=titular,
+            ),
             intencion="AGENDA_MANANA",
             fecha_desde=objetivo,
             fecha_hasta=objetivo,
@@ -574,7 +1057,10 @@ def responder_pregunta_agenda(
         ]
 
         return AgendaAgenteRespuesta(
-            respuesta=_resumen_visitas(visitas),
+            respuesta=_resumen_visitas(
+                visitas,
+                titular=titular,
+            ),
             intencion="AGENDA_SEMANA",
             fecha_desde=desde,
             fecha_hasta=hasta,
@@ -603,10 +1089,12 @@ def responder_pregunta_agenda(
         ]
 
         if not futuras:
+            no_tiene = _verbo_no_tener(titular)
+
             return AgendaAgenteRespuesta(
                 respuesta=(
-                    "No encontré próximas visitas "
-                    "en los siguientes 60 días."
+                    f"{no_tiene} próximas visitas "
+                    f"en los siguientes 60 días."
                 ),
                 intencion="PROXIMA_VISITA",
                 fecha_desde=hoy,
@@ -615,12 +1103,15 @@ def responder_pregunta_agenda(
 
         visita = futuras[0]
 
+        articulo = _articulo_posesivo(titular)
+        de_quien = _de_quien(titular)
+
         if (
             "donde" in texto
             or "ubicacion" in texto
         ):
             respuesta = (
-                f"Tu siguiente visita es "
+                f"{articulo} siguiente visita{de_quien} es "
                 f"{visita.codigo} con "
                 f"{visita.empresa}, "
                 f"en {_ubicacion_texto(visita)}, "
@@ -628,7 +1119,7 @@ def responder_pregunta_agenda(
             )
         else:
             respuesta = (
-                f"Tu siguiente visita es "
+                f"{articulo} siguiente visita{de_quien} es "
                 f"{visita.codigo} con "
                 f"{visita.empresa}, el "
                 f"{visita.fecha.strftime('%d/%m/%Y')} "
@@ -644,24 +1135,6 @@ def responder_pregunta_agenda(
             visitas=[visita],
         )
 
-    # Si el usuario menciona una unidad temporal que todavía
-    # no está soportada, no debemos responder falsamente con
-    # la agenda de HOY. Es preferible pedir precisión.
-    periodos_no_soportados = (
-        "quincena",
-        "trimestre",
-        "semestre",
-        "ano",
-        "año",
-        "fin de semana",
-    )
-
-    if any(
-        periodo in texto
-        for periodo in periodos_no_soportados
-    ):
-        return _respuesta_periodo_no_interpretado()
-
     # Consultas sobre HOY: por defecto dentro del dominio.
     eventos = _consultar(
         db,
@@ -676,9 +1149,13 @@ def responder_pregunta_agenda(
     ]
 
     if "termino" in texto or "ultima" in texto:
+        articulo = _articulo_posesivo(titular)
+        de_quien = _de_quien(titular)
+
         if not visitas:
+            no_tiene = _verbo_no_tener(titular)
             respuesta = (
-                "No tienes visitas programadas para hoy."
+                f"{no_tiene} visitas programadas para hoy."
             )
         else:
             ultima = visitas[-1]
@@ -687,11 +1164,11 @@ def responder_pregunta_agenda(
                 or ultima.hora_inicio
             )
             respuesta = (
-                f"Tu última visita de hoy es "
+                f"{articulo} última visita de hoy{de_quien} es "
                 f"{ultima.codigo} con "
                 f"{ultima.empresa}. "
-                f"Tu jornada de visitas termina "
-                f"aproximadamente a las "
+                f"{articulo} jornada de visitas{de_quien} "
+                f"termina aproximadamente a las "
                 f"{_hora_texto(fin)}."
             )
 
@@ -705,9 +1182,13 @@ def responder_pregunta_agenda(
         )
 
     if "primera" in texto:
+        articulo = _articulo_posesivo(titular)
+        de_quien = _de_quien(titular)
+
         if not visitas:
+            no_tiene = _verbo_no_tener(titular)
             respuesta = (
-                "No tienes visitas programadas para hoy."
+                f"{no_tiene} visitas programadas para hoy."
             )
             seleccionadas: list[
                 AgendaAgenteVisita
@@ -716,7 +1197,7 @@ def responder_pregunta_agenda(
             primera = visitas[0]
             seleccionadas = [primera]
             respuesta = (
-                f"Tu primera visita de hoy es "
+                f"{articulo} primera visita de hoy{de_quien} es "
                 f"{primera.codigo} con "
                 f"{primera.empresa} a las "
                 f"{_hora_texto(primera.hora_inicio)}, "
@@ -733,10 +1214,41 @@ def responder_pregunta_agenda(
         )
 
     return AgendaAgenteRespuesta(
-        respuesta=_resumen_visitas(visitas),
+        respuesta=_resumen_visitas(
+            visitas,
+            titular=titular,
+        ),
         intencion="AGENDA_HOY",
         fecha_desde=hoy,
         fecha_hasta=hoy,
         total_visitas=len(visitas),
         visitas=visitas,
+    )
+
+
+def _es_dominio_agenda(texto: str) -> bool:
+    palabras = (
+        "agenda",
+        "visita",
+        "visitas",
+        "tengo hoy",
+        "tengo manana",
+        "tengo mañana",
+        "proxima",
+        "proximo",
+        "siguiente",
+        "horario",
+        "ubicacion",
+        "ubicación",
+        "donde queda",
+        "dónde queda",
+        "a que hora",
+        "qué hora",
+        "termino hoy",
+        "semana",
+    )
+
+    return any(
+        palabra in texto
+        for palabra in palabras
     )

@@ -1,4 +1,5 @@
-﻿from datetime import date, time
+from datetime import date, time
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -12,6 +13,31 @@ class AgendaAgentePregunta(BaseModel):
             "exclusivamente con la agenda propia."
         ),
     )
+
+
+PeriodoAgendaAgente = Literal[
+    "HOY",
+    "MANANA",
+    "ESTA_SEMANA",
+    "RESTO_SEMANA",
+    "ESTE_MES",
+    "RESTO_MES",
+    "SIN_PERIODO",
+]
+
+EstadoAgendaAgente = Literal[
+    "PROGRAMADA",
+    "EN_PROCESO",
+    "FINALIZADA",
+    "CANCELADA",
+    "SIN_ESTADO",
+]
+
+
+class AgendaAgenteConsultaEstructurada(BaseModel):
+    periodo: PeriodoAgendaAgente
+    ciudad: str = Field(default="SIN_CIUDAD", max_length=100)
+    estado: EstadoAgendaAgente = "SIN_ESTADO"
 
 
 class AgendaAgenteVisita(BaseModel):

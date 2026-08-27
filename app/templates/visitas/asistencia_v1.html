@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>Formato de asistencia - {{ documento.codigo }}</title>
+  <style>
+    @page {
+      size: A4 landscape;
+      margin: 6mm;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      color: #263238;
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 8.6pt;
+      line-height: 1.25;
+    }
+
+    .header {
+      display: table;
+      width: 100%;
+      padding-bottom: 2mm;
+      border-bottom: 2px solid #1071B0;
+    }
+
+    .header-logo,
+    .header-title,
+    .header-control {
+      display: table-cell;
+      vertical-align: middle;
+    }
+
+    .header-logo { width: 23%; }
+    .header-title { width: 54%; text-align: center; }
+    .header-control { width: 23%; text-align: right; }
+
+    .logo {
+      max-width: 38mm;
+      max-height: 16mm;
+      object-fit: contain;
+    }
+
+    h1 {
+      margin: 0;
+      color: #1071B0;
+      font-size: 15pt;
+      letter-spacing: .2pt;
+    }
+
+    .subtitle {
+      margin-top: 1mm;
+      color: #47565C;
+      font-size: 8.5pt;
+    }
+
+    .control strong { color: #1071B0; }
+
+    .visit-card {
+      margin-top: 1.5mm;
+      border: 1px solid #CAD5DB;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    .visit-title {
+      padding: 1.5mm 2.5mm;
+      color: #ffffff;
+      background: #1071B0;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .25pt;
+    }
+
+    .info-table,
+    .attendance-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .info-table td {
+      width: 25%;
+      padding: 1.1mm 1.8mm;
+      border-right: 1px solid #E2E8EC;
+      border-bottom: 1px solid #E2E8EC;
+      vertical-align: top;
+    }
+
+    .info-table tr:last-child td { border-bottom: 0; }
+    .info-table td:last-child { border-right: 0; }
+
+    .label {
+      display: block;
+      margin-bottom: .6mm;
+      color: #667B85;
+      font-size: 6.8pt;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    .value {
+      color: #263238;
+      font-size: 8.2pt;
+      font-weight: 600;
+    }
+
+    .instruction {
+      margin: 2mm 0 1.8mm;
+      padding: 1.5mm 2.5mm;
+      border-left: 3px solid #84BC49;
+      background: #F3F7F9;
+      color: #47565C;
+      font-size: 7.6pt;
+    }
+
+    .attendance-table {
+      table-layout: fixed;
+      border: 1px solid #9EAFB7;
+    }
+
+    .attendance-table thead th {
+      height: 5.8mm;
+      padding: 1.2mm;
+      border: 1px solid #9EAFB7;
+      color: #ffffff;
+      background: #0893CC;
+      font-size: 7.1pt;
+      text-align: center;
+      vertical-align: middle;
+    }
+
+    .attendance-table tbody td {
+      height: 5.15mm;
+      padding: .7mm 1mm;
+      border: 1px solid #AEBCC3;
+      background: #ffffff;
+      vertical-align: middle;
+    }
+
+    .attendance-table tbody tr:nth-child(even) td {
+      background: #FAFCFD;
+    }
+
+    .c-num { width: 4%; text-align: center; }
+    .c-name { width: 25%; }
+    .c-id { width: 14%; }
+    .c-area { width: 17%; }
+    .c-contact { width: 22%; }
+    .c-sign { width: 18%; }
+
+    .signatures {
+      display: table;
+      width: 100%;
+      margin-top: 1.5mm;
+    }
+
+    .signature-box {
+      display: table-cell;
+      width: 50%;
+      padding-right: 6mm;
+      vertical-align: bottom;
+    }
+
+    .signature-box:last-child {
+      padding-right: 0;
+      padding-left: 6mm;
+    }
+
+    .signature-line {
+      height: 5mm;
+      border-bottom: 1px solid #47565C;
+    }
+
+    .signature-caption {
+      padding-top: 1mm;
+      color: #47565C;
+      font-size: 7.2pt;
+      text-align: center;
+    }
+
+    .footer {
+      margin-top: 1.5mm;
+      padding-top: 1mm;
+      border-top: 1px solid #DCE4E8;
+      color: #667B85;
+      font-size: 6.6pt;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <header class="header">
+    <div class="header-logo">
+      {% if documento.logo_uri %}
+        <img class="logo" src="{{ documento.logo_uri }}" alt="SICOE">
+      {% else %}
+        <strong style="color:#1071B0;font-size:16pt;">SICOE</strong>
+      {% endif %}
+    </div>
+
+    <div class="header-title">
+      <h1>FORMATO DE ASISTENCIA</h1>
+      <div class="subtitle">SICOE VISITAS - Registro presencial de participantes</div>
+    </div>
+
+    <div class="header-control control">
+      <div><strong>{{ documento.codigo }}</strong></div>
+      <div>Versión {{ documento.version }}</div>
+      <div>Generado: {{ documento.fecha_generacion }}</div>
+    </div>
+  </header>
+
+  <section class="visit-card">
+    <div class="visit-title">Información de la visita</div>
+    <table class="info-table">
+      <tr>
+        <td><span class="label">Empresa / tercero</span><span class="value">{{ empresa.nombre }}</span></td>
+        <td><span class="label">NIT / identificación</span><span class="value">{{ empresa.nit }}</span></td>
+        <td><span class="label">Fecha</span><span class="value">{{ visita.fecha }}</span></td>
+        <td><span class="label">Horario</span><span class="value">{{ visita.hora_inicio }} - {{ visita.hora_fin }}</span></td>
+      </tr>
+      <tr>
+        <td><span class="label">Ciudad / departamento</span><span class="value">{{ empresa.ciudad }}, {{ empresa.departamento }}</span></td>
+        <td><span class="label">Dirección</span><span class="value">{{ empresa.direccion }}</span></td>
+        <td><span class="label">Servicio / tipo</span><span class="value">{{ visita.servicio }} / {{ visita.tipo }}</span></td>
+        <td><span class="label">Asesor SICOE</span><span class="value">{{ asesor.nombre }}</span></td>
+      </tr>
+    </table>
+  </section>
+
+  <div class="instruction">
+    Diligencie de manera legible. Cada participante debe registrar sus datos y firma. Este formato corresponde exclusivamente a la visita {{ documento.codigo }}.
+    {% if visita.participantes_esperados %} Participantes registrados en la programación: {{ visita.participantes_esperados }}.{% endif %}
+  </div>
+
+  <table class="attendance-table">
+    <thead>
+      <tr>
+        <th class="c-num">No.</th>
+        <th class="c-name">Nombre completo</th>
+        <th class="c-id">Identificación</th>
+        <th class="c-area">Cargo / Área</th>
+        <th class="c-contact">Teléfono o correo</th>
+        <th class="c-sign">Firma</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for numero in asistencia.filas %}
+      <tr>
+        <td class="c-num">{{ numero }}</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <section class="signatures">
+    <div class="signature-box">
+      <div class="signature-line"></div>
+      <div class="signature-caption">Asesor SICOE: {{ asesor.nombre }}</div>
+    </div>
+    <div class="signature-box">
+      <div class="signature-line"></div>
+      <div class="signature-caption">Responsable del cliente / empresa</div>
+    </div>
+  </section>
+
+  <footer class="footer">
+    SICOE VISITAS | Formato de asistencia | {{ documento.codigo }} | Versión {{ documento.version }}
+  </footer>
+</body>
+</html>

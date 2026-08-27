@@ -3,42 +3,66 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
-
+ 
 # Virtual Environment
 .venv/
-
+ 
 # Environment
 .env
-
+ 
 # VSCode
 .vscode/
-
+ 
 # Logs
 *.log
-
+ 
 # Pytest
 .pytest_cache/
-
+ 
 # Mypy
 .mypy_cache/
-
+ 
 # macOS
 .DS_Store
-
+ 
 # Windows
 Thumbs.db
+ 
 # Respaldos locales y temporales
 *.backup_*
 *.respaldo_*
 *.bak
 *.tmp
-
+ 
 *.py[cod]
-
+ 
 # Variables y secretos
 .env.*
 !.env.example
-
+ 
 # Archivos generados
 output/
 app.zip
+ 
+# === Agregado 25/08/2026 - limpieza antes de deploy a produccion ===
+ 
+# Backups automaticos de los instaladores (no son codigo fuente)
+_backups/
+backups/
+backup_*/
+ 
+# Node (no debe ir en el repo del backend)
+node_modules/
+package-lock.json
+package.json
+ 
+# Uploads de usuarios reales - nunca deben ir al repositorio
+uploads/
+ 
+# Archivos de respaldo temporal con sufijo _old
+*_old.py
+*_old_*.py
+ 
+# Duplicado/typo de app/models/__init__.py - revisar manualmente
+app/models_init.py
+ 

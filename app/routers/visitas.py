@@ -37,7 +37,21 @@ from app.services.visita_service import (
 )
 
 from app.services.visita_pdf_service import generar_pdf_visita
+from app.services.visita_asistencia_pdf_service import generar_pdf_asistencia
 from app.services.ubicacion_service import validar_ubicacion_visita
+
+from fastapi import File, Form, UploadFile
+
+from app.schemas.visita_evidencia import (
+VisitaEvidenciaListado,
+ VisitaEvidenciaRespuesta,
+ )
+
+from app.services.visita_evidencia_service import (
+    crear_evidencia,
+    eliminar_evidencia,
+    listar_evidencias,
+ )
 
 router = APIRouter(
     prefix="/api/v1/visitas",
@@ -136,6 +150,69 @@ def descargar_pdf_visita(
     codigo_visita = f"VIS-{visita.id:06d}"
     nombre_archivo = (
         f"Informe_Visita_{codigo_visita}.pdf"
+    )
+
+    return Response(
+        content=contenido_pdf,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="{nombre_archivo}"'
+            ),
+            "Cache-Control": "no-store",
+        },
+    )
+
+
+@router.get(
+    "/{visita_id}/asistencia-pdf",
+    response_class=Response,
+    summary="Descargar formato PDF de asistencia",
+)
+def descargar_pdf_asistencia(
+    visita_id: int,
+    db: Session = Depends(get_db),
+    usuario_actual: Usuario = Depends(
+        require_roles(
+            "ADMINISTRADOR",
+            "COORDINADOR",
+            "ASESOR",
+        )
+    ),
+) -> Response:
+    """
+    Genera un formato imprimible de asistencia
+    asociado a una visita.
+
+    Un usuario ASESOR solo puede descargar el
+    formato de sus propias visitas.
+    """
+
+    visita = obtener_visita(
+        db=db,
+        visita_id=visita_id,
+    )
+
+    if (
+        usuario_actual.rol == "ASESOR"
+        and visita.asesor_id != usuario_actual.asesor_id
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "No tiene permiso para descargar "
+                "la asistencia de esta visita."
+            ),
+        )
+
+    contenido_pdf = generar_pdf_asistencia(
+        db=db,
+        visita_id=visita_id,
+    )
+
+    codigo_visita = f"VIS-{visita.id:06d}"
+    nombre_archivo = (
+        f"Formato_Asistencia_{codigo_visita}.pdf"
     )
 
     return Response(
@@ -348,5 +425,128 @@ def reactivar_visita_endpoint(
     return reactivar_visita(
         db=db,
         visita_id=visita_id,
+        usuario_actual_id=usuario_actual.id,
+    )
+
+@router.post(
+    "/{visita_id}/evidencias",
+    response_model=VisitaEvidenciaRespuesta,
+    status_code=status.HTTP_201_CREATED,
+    summary="Adjuntar acta/asistencia u otra evidencia a una visita",
+)
+def subir_evidencia_visita(
+    visita_id: int,
+    archivo: UploadFile = File(...),
+    tipo_archivo: str = Form(default="PDF"),
+    descripcion: str | None = Form(default=None),
+    db: Session = Depends(get_db),
+    usuario_actual: Usuario = Depends(
+        require_roles(
+            "ADMINISTRADOR",
+            "COORDINADOR",
+            "ASESOR",
+        )
+    ),
+) -> VisitaEvidenciaRespuesta:
+    """
+    Sube un archivo (acta firmada, formato de
+    asistencia firmado, u otra evidencia) y lo
+    asocia a la visita.
+
+    Un usuario ASESOR solo puede adjuntar
+    archivos a sus propias visitas.
+    """
+
+    visita = obtener_visita(
+        db=db,
+        visita_id=visita_id,
+    )
+
+    if (
+        usuario_actual.rol == "ASESOR"
+        and visita.asesor_id != usuario_actual.asesor_id
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "No tiene permiso para adjuntar "
+                "archivos a esta visita."
+            ),
+        )
+
+    return crear_evidencia(
+        db=db,
+        visita_id=visita_id,
+        archivo=archivo,
+        tipo_archivo=tipo_archivo,
+        descripcion=descripcion,
+        usuario_actual_id=usuario_actual.id,
+    )
+
+
+@router.get(
+    "/{visita_id}/evidencias",
+    response_model=VisitaEvidenciaListado,
+    summary="Listar adjuntos/evidencias de una visita",
+)
+def listar_evidencias_visita(
+    visita_id: int,
+    db: Session = Depends(get_db),
+    usuario_actual: Usuario = Depends(
+        require_roles(
+            "ADMINISTRADOR",
+            "COORDINADOR",
+            "ASESOR",
+        )
+    ),
+) -> VisitaEvidenciaListado:
+    visita = obtener_visita(
+        db=db,
+        visita_id=visita_id,
+    )
+
+    if (
+        usuario_actual.rol == "ASESOR"
+        and visita.asesor_id != usuario_actual.asesor_id
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "No tiene permiso para consultar "
+                "los adjuntos de esta visita."
+            ),
+        )
+
+    resultados = listar_evidencias(
+        db=db,
+        visita_id=visita_id,
+    )
+
+    return VisitaEvidenciaListado(
+        resultados=resultados,
+        total=len(resultados),
+    )
+
+
+@router.delete(
+    "/{visita_id}/evidencias/{evidencia_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Eliminar (soft-delete) un adjunto de una visita",
+)
+def eliminar_evidencia_visita(
+    visita_id: int,
+    evidencia_id: int,
+    db: Session = Depends(get_db),
+    usuario_actual: Usuario = Depends(
+        require_roles(
+            "ADMINISTRADOR",
+            "COORDINADOR",
+        )
+    ),
+) -> None:
+    eliminar_evidencia(
+        db=db,
+        visita_id=visita_id,
+        evidencia_id=evidencia_id,
         usuario_actual_id=usuario_actual.id,
     )
