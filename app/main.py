@@ -1,5 +1,6 @@
 ﻿from datetime import datetime, timezone
 from typing import Any
+import os
 
 from fastapi import FastAPI
 
@@ -60,14 +61,32 @@ app.include_router(agenda_agente_router)
 app.include_router(agenda_agente_proxima_router)
 app.include_router(catalogos_router)
 
-UPLOADS_DIR = Path("uploads")
-UPLOADS_DIR.mkdir(exist_ok=True)
-#
-app.mount(
-    "/uploads",
-    StaticFiles(directory=str(UPLOADS_DIR)),
-    name="uploads",
+UPLOADS_DIR = Path(
+    os.getenv("UPLOADS_DIR", "uploads")
 )
+
+try:
+    UPLOADS_DIR.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    app.mount(
+        "/uploads",
+        StaticFiles(directory=str(UPLOADS_DIR)),
+        name="uploads",
+    )
+except OSError as error:
+    # Si el contenedor no tiene permisos de escritura en esta
+    # ruta (ej. un cambio de imagen/usuario en el despliegue),
+    # la API sigue funcionando igual - solo queda deshabilitada
+    # la descarga de archivos en /uploads hasta que se resuelva
+    # el permiso o se configure UPLOADS_DIR a una ruta escribible.
+    print(
+        "ADVERTENCIA: no se pudo preparar la carpeta de "
+        f"uploads en '{UPLOADS_DIR}': {error}. "
+        "El resto de la API sigue funcionando normalmente."
+    )
 
 
 @app.get("/")
@@ -106,5 +125,4 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 
