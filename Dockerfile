@@ -27,6 +27,16 @@ RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir -r requirements.txt
 
 COPY app ./app
+COPY alembic.ini .
+COPY migrations ./migrations
+
+# Crear la carpeta de uploads y darle dueño a appuser ANTES de
+# cambiar de usuario - si no, appuser no tiene permiso de
+# escribir dentro de /app (que Docker crea como root por
+# defecto), y la app falla al intentar crear esta carpeta en
+# tiempo de ejecución.
+RUN mkdir -p /app/uploads \
+    && chown -R appuser:appgroup /app
 
 USER appuser
 
